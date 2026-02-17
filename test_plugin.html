@@ -1,9 +1,9 @@
 <!--
-文件作用：测试HTML插件应用，包含计数器、主题颜色切换、待办事项和统计信息
-依赖：无（纯原生JavaScript）
-输入：用户点击按钮、选择颜色、输入待办事项
-输出：实时显示计数值、更新主题颜色、显示待办事项列表、统计使用数据
-实现方式：使用JavaScript变量存储状态，通过DOM操作更新界面，LocalStorage用于数据持久化
+文件作用：测试HTML插件应用，包含计数器、主题颜色切换、待办事项、统计信息和文件系统API测试
+依赖：NeoPod文件系统API
+输入：用户点击按钮、选择颜色、输入待办事项、文件操作
+输出：实时显示计数值、更新主题颜色、显示待办事项列表、统计使用数据、文件操作结果
+实现方式：使用JavaScript变量存储状态，通过DOM操作更新界面，LocalStorage和NeoPod文件API用于数据持久化
 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -60,7 +60,6 @@
             position: relative;
         }
 
-        /* 确保背景覆盖整个视口 */
         body::before {
             content: '';
             position: fixed;
@@ -211,6 +210,11 @@
             background: rgba(255, 255, 255, 0.2);
         }
 
+        .btn-small {
+            padding: 12px 24px;
+            font-size: 16px;
+        }
+
         .color-picker {
             display: flex;
             gap: 16px;
@@ -354,6 +358,126 @@
             letter-spacing: 1px;
         }
 
+        .file-input {
+            width: 100%;
+            padding: 16px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 16px;
+            margin-bottom: 16px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .file-input:focus {
+            border-color: #f57309;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .file-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .file-list {
+            list-style: none;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .file-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .file-icon {
+            font-size: 24px;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .file-meta {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+        }
+
+        .file-delete {
+            color: #ff4757;
+            cursor: pointer;
+            font-size: 20px;
+            opacity: 0;
+            transition: all 0.2s ease;
+            padding: 4px;
+        }
+
+        .file-item:hover .file-delete {
+            opacity: 1;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .log-area {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 16px;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: rgba(255, 255, 255, 0.5);
+            margin-right: 8px;
+        }
+
+        .log-success {
+            color: #2ecc71;
+        }
+
+        .log-error {
+            color: #e74c3c;
+        }
+
+        .log-info {
+            color: #3498db;
+        }
+
         .bottom-nav {
             display: flex;
             justify-content: space-around;
@@ -481,6 +605,21 @@
                 </div>
             </div>
 
+            <div class="page" id="page-files">
+                <div class="card">
+                    <div class="card-title">
+                        <span>📁</span> 文件系统测试
+                    </div>
+                    <input type="text" class="file-input" id="fileInput" placeholder="输入文件名|内容 (例如: test.txt|Hello World)">
+                    <div class="file-actions">
+                        <button class="btn btn-small" onclick="createFile()">创建文件</button>
+                        <button class="btn btn-small btn-secondary" onclick="loadFiles()">刷新列表</button>
+                    </div>
+                    <ul class="file-list" id="fileList"></ul>
+                    <div class="log-area" id="logArea"></div>
+                </div>
+            </div>
+
             <div class="page" id="page-stats">
                 <div class="card">
                     <div class="card-title">
@@ -496,9 +635,18 @@
                             <div class="status-label">待办事项</div>
                         </div>
                         <div class="status-item">
-                            <div class="status-value" id="timeElapsed">0s</div>
-                            <div class="status-label">使用时间</div>
+                            <div class="status-value" id="fileCount">0</div>
+                            <div class="status-label">文件数量</div>
                         </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">
+                        <span>⏱️</span> 使用时间
+                    </div>
+                    <div class="status-item">
+                        <div class="status-value" id="timeElapsed">0s</div>
+                        <div class="status-label">使用时间</div>
                     </div>
                 </div>
                 <div class="card">
@@ -506,9 +654,10 @@
                         <span>ℹ️</span> 关于
                     </div>
                     <div style="color: rgba(255, 255, 255, 0.7); line-height: 1.8;">
-                        <p>NeoPod 测试插件 v1.0</p>
+                        <p>NeoPod 测试插件 v2.0</p>
                         <p>这是一个示例应用，展示了如何在 NeoPod 中开发 HTML 插件。</p>
                         <p style="margin-top: 12px;">点击底部导航切换不同功能模块。</p>
+                        <p style="margin-top: 12px;">新特性：文件系统 API 测试</p>
                     </div>
                 </div>
             </div>
@@ -527,6 +676,10 @@
                 <span class="nav-icon">✅</span>
                 <span class="nav-label">待办</span>
             </button>
+            <button class="nav-item" data-page="files" onclick="switchPage('files')">
+                <span class="nav-icon">📁</span>
+                <span class="nav-label">文件</span>
+            </button>
             <button class="nav-item" data-page="stats" onclick="switchPage('stats')">
                 <span class="nav-icon">📈</span>
                 <span class="nav-label">统计</span>
@@ -539,6 +692,7 @@
         let clickCount = 0;
         let startTime = Date.now();
         let accentColor = '#f57309';
+        let fileCount = 0;
 
         function closeWindow() {
             try {
@@ -569,6 +723,10 @@
             
             document.getElementById('page-' + pageName).classList.add('active');
             trackClick();
+            
+            if (pageName === 'files') {
+                loadFiles();
+            }
         }
 
         function incrementCounter() {
@@ -651,6 +809,118 @@
             document.getElementById('todoCount').textContent = count;
         }
 
+        function addLog(message, type = 'info') {
+            const logArea = document.getElementById('logArea');
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            
+            let typeClass = 'log-info';
+            if (type === 'success') typeClass = 'log-success';
+            if (type === 'error') typeClass = 'log-error';
+            
+            logEntry.innerHTML = `
+                <span class="log-time">[${time}]</span>
+                <span class="${typeClass}">${message}</span>
+            `;
+            
+            logArea.insertBefore(logEntry, logArea.firstChild);
+        }
+
+        function loadFiles() {
+            addLog('正在读取文件列表...', 'info');
+            
+            if (typeof NeoPod === 'undefined' || !NeoPod.readDir) {
+                addLog('NeoPod API 不可用', 'error');
+                return;
+            }
+            
+            NeoPod.readDir('dev/', function(error, files) {
+                if (error) {
+                    addLog('读取目录失败: ' + error.message, 'error');
+                    return;
+                }
+                
+                const list = document.getElementById('fileList');
+                list.innerHTML = '';
+                
+                if (files.length === 0) {
+                    list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>暂无文件</p></div>';
+                    fileCount = 0;
+                } else {
+                    files.forEach(function(file) {
+                        const fileItem = document.createElement('li');
+                        fileItem.className = 'file-item';
+                        fileItem.innerHTML = `
+                            <span class="file-icon">${file.isDirectory ? '📁' : '📄'}</span>
+                            <div class="file-info">
+                                <div class="file-name">${file.name}</div>
+                                <div class="file-meta">${file.size} bytes</div>
+                            </div>
+                            ${!file.isDirectory ? '<span class="file-delete" onclick="deleteFile(\'' + file.name + '\')">×</span>' : ''}
+                        `;
+                        list.appendChild(fileItem);
+                    });
+                    fileCount = files.length;
+                }
+                
+                document.getElementById('fileCount').textContent = fileCount;
+                addLog('成功读取 ' + fileCount + ' 个文件', 'success');
+            });
+        }
+
+        function createFile() {
+            const input = document.getElementById('fileInput');
+            const text = input.value.trim();
+            if (!text) {
+                addLog('请输入文件名和内容', 'error');
+                return;
+            }
+            
+            const parts = text.split('|');
+            const filename = parts[0].trim() || 'test.txt';
+            const content = parts[1] || 'Hello World!';
+            
+            addLog('正在创建文件: ' + filename, 'info');
+            
+            if (typeof NeoPod === 'undefined' || !NeoPod.writeFile) {
+                addLog('NeoPod API 不可用', 'error');
+                return;
+            }
+            
+            NeoPod.writeFile('dev/' + filename, content,
+                function() {
+                    addLog('文件创建成功: ' + filename, 'success');
+                    input.value = '';
+                    loadFiles();
+                },
+                function(error) {
+                    addLog('文件创建失败: ' + error.message, 'error');
+                }
+            );
+        }
+
+        function deleteFile(filename) {
+            if (!confirm('确定要删除 ' + filename + ' 吗？')) return;
+            
+            addLog('正在删除文件: ' + filename, 'info');
+            
+            if (typeof NeoPod === 'undefined' || !NeoPod.deleteFile) {
+                addLog('NeoPod API 不可用', 'error');
+                return;
+            }
+            
+            NeoPod.deleteFile('dev/' + filename,
+                function() {
+                    addLog('文件删除成功: ' + filename, 'success');
+                    loadFiles();
+                },
+                function(error) {
+                    addLog('文件删除失败: ' + error.message, 'error');
+                }
+            );
+        }
+
         function updateTimeElapsed() {
             const elapsed = Math.floor((Date.now() - startTime) / 1000);
             const minutes = Math.floor(elapsed / 60);
@@ -698,7 +968,6 @@
         }
 
         function adjustLayout() {
-            // 强制触发重排，确保布局正确
             document.body.style.transform = 'translateZ(0)';
             setTimeout(() => {
                 document.body.style.transform = '';
