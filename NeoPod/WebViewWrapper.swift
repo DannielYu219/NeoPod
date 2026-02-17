@@ -1,13 +1,11 @@
-import SwiftUI
-import WebKit
-
-// MARK: - WebView Wrapper
+// 注意：实际代码应放在原来的 ContentView.swift 中
+// Update your original WebView in ContentView.swift as follows:
 
 struct WebView: UIViewRepresentable {
     let url: URL
     let onClose: () -> Void
     
-    // 共享的 URL Scheme Handler
+    // 共享的 URL Scheme Handler - 保持现有引用
     private static let urlSchemeHandler = AppURLSchemeHandler()
     
     func makeUIView(context: Context) -> InternalWebView {
@@ -24,9 +22,12 @@ struct WebView: UIViewRepresentable {
         contentController.add(context.coordinator, name: "NeoPodBridge")
         configuration.userContentController = contentController
         
-        // 注入 JavaScript API
+        // 注入 JavaScript API - 包含文件操作API
         let scriptSource = """
         (function() {
+            // Create global storage for pending file write operations
+            window.pendingOperations = new Map();
+            
             window.NeoPod = {
                 close: function() {
                     window.webkit.messageHandlers.NeoPodBridge.postMessage({ action: 'close' });
@@ -35,110 +36,96 @@ struct WebView: UIViewRepresentable {
                     window.webkit.messageHandlers.NeoPodBridge.postMessage({ action: 'navigateBack' });
                 },
                 
-                // 文件操作API
-                readFileSync: function(filePath) {
-                    const response = fetch('app://' + filePath);
-                    if (response.status === 200) {
-                        return response.text();
-                    }
-                    throw new Error('Failed to read file: ' + response.status);
-                },
-                
-                writeFile: function(filePath, content, onSuccess, onError) {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('PUT', 'app://' + filePath, true);
-                    xhr.setRequestHeader('Content-Type', 'text/plain');
-                    
-                    xhr.onreadystatechange = function() {
-                        if (xhr.readyState === 4) {
-                            if (xhr.status >= 200 && xhr.status < 300) {
-                                onSuccess && onSuccess(xhr.responseText);
-                            } else {
-                                onError && onError(new Error('Failed to write file: ' + xhr.status));
-                            }
-                        }
-                    };
-                    
-                    xhr.onerror = function() {
-                        onError && onError(new Error('Network error occurred'));
-                    };
-                    
-                    xhr.send(content);
-                },
-                
-                writeFileAsync: async function(filePath, content) {
+                // Async file read operation
+                readFile: async function(filePath) {
                     try {
-                        const response = await fetch('app://' + filePath, {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'text/plain'
-                            },
-                            body: content
-                        });
+                        const response = await fetch('app://' + filePath);
                         if (!response.ok) {
-                            throw new Error('Failed to write file: ' + response.statusText);
+                            throw new Error(`File read failed with status ${response.status}`);
                         }
                         return await response.text();
                     } catch (error) {
-                        throw new Error('Network error: ' + error.message);
+                        throw new Error('Read operation failed: ' + error.message);
                     }
                 },
                 
-                readDir: function(folderPath, callback) {
-                    // 使用特殊的list路径格式
-                    fetch('app://' + folderPath + '/list/')
-                        .then(response => {
-                            if (response.ok) {
-                                return response.json();
-                            }
-                            throw new Error('Failed to read directory: ' + response.status);
-                        })
-                        .then(data => callback(null, data.files))
-                        .catch(error => callback(error, null));
-                },
-                
-                readDirSync: async function(folderPath) {
+                // Read directory operation
+                readDir: async function(folderPath) {
                     try {
-                        const response = await fetch('app://' + folderPath + '/list/');
+                        const path = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+                        const response = await fetch('app://' + path + 'list');
+                        
                         if (!response.ok) {
-                            throw new Error('Failed to read directory: ' + response.statusText);
+                            throw new Error(`Directory read failed with status ${response.status}`);
                         }
+                        
                         const data = await response.json();
+                        if (!data.success) {
+                            throw new Error('Server returned error: ' + (data.message || 'Unknown'));
+                        }
+                        
                         return data.files;
                     } catch (error) {
-                        throw new Error('Network error: ' + error.message);
+                        throw new Error('Directory read operation failed: ' + error.message);
                     }
                 },
                 
-                deleteFile: function(filePath, onSuccess, onError) {
-                    const xhr = new XMLHttpRequest();
-                    xhr.open('DELETE', 'app://' + filePath, true);
+                // Write file through bridge since direct fetch PUT might not contain body
+                writeTextFile: async function(filePath, content) {
+                    // Store operation in a pending map to handle via script communication
+                    const operationId = Date.now() + Math.random().toString(36).substr(2, 9);
+                    window.pendingFilePaths = window.pendingFilePaths || {};
+                    window.pendingFilePaths[operationId] = { path: filePath, content: String(content) };
                     
-                    xhr.onreadystatechange = function() {
-                        if (xhr.readyState === 4) {
+                    return new Promise((resolve, reject) => {
+                        // Send through JS bridge (we'll modify the bridge to handle this specifically later)
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('POST', 'app://pending/' + operationId, true);
+                        xhr.onload = function() {
                             if (xhr.status >= 200 && xhr.status < 300) {
-                                onSuccess && onSuccess();
+                                resolve(xhr.responseText);
                             } else {
-                                onError && onError(new Error('Failed to delete file: ' + xhr.status));
+                                reject(new Error('File write failed: status ' + xhr.status));
                             }
+                        };
+                        xhr.onerror = function() {
+                            reject(new Error('Network error'));
+                        };
+                        xhr.setRequestHeader('Content-Type', 'application/json');
+                        xhr.send(JSON.stringify({ content: String(content) }));
+                    });
+                },
+                
+                deleteFile: async function(filePath, callback) {
+                    try {
+                        const response = await fetch('app://' + filePath, { method: 'DELETE' });
+                        
+                        if (!response.ok) {
+                            throw new Error(`File deletion failed with status ${response.status}`);
                         }
-                    };
-                    
-                    xhr.onerror = function() {
-                        onError && onError(new Error('Network error occurred'));
-                    };
-                    
-                    xhr.send();
+                        
+                        const result = await response.json();
+                        if (typeof callback === 'function') {
+                            callback(null, result.success ? result : { error: 'Success response malformed' });
+                        }
+                        return result;
+                    } catch (error) {
+                        const err = new Error('Delete operation failed: ' + error.message);
+                        if (typeof callback === 'function') {
+                            callback(err, null);
+                        }
+                        throw err;
+                    }
                 }
             };
             
-            // 兼容标准窗口关闭调用
+            // Allow standard window closing
             var originalClose = window.close;
             window.close = function() {
                 window.NeoPod.close();
             };
             
-            console.log('NeoPod API is ready!');
+            console.log('NeoPod API initialized successfully');
         })();
         """
         
@@ -151,14 +138,15 @@ struct WebView: UIViewRepresentable {
         
         let webView = InternalWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator  // Add UI delegate to handle certain navigations
+        
+        // Configure scroll behavior
         webView.scrollView.bounces = true
         webView.scrollView.showsVerticalScrollIndicator = false
         webView.scrollView.showsHorizontalScrollIndicator = false
         
-        // 关键修复：禁用安全区 inset
+        // Disable safe area inset adjustments
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        
-        // 设置 autoresizing 以填充整个父视图
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.translatesAutoresizingMaskIntoConstraints = true
         
@@ -174,18 +162,16 @@ struct WebView: UIViewRepresentable {
         Coordinator(onClose: onClose)
     }
     
-    // 自定义 WKWebView 子类，重写 layoutSubviews 以确保填满
     class InternalWebView: WKWebView {
         override func layoutSubviews() {
             super.layoutSubviews()
-            // 确保 webView 始终填满父容器
             if let superview = superview {
                 frame = superview.bounds
             }
         }
     }
     
-    class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let onClose: () -> Void
         
         init(onClose: @escaping () -> Void) {
@@ -194,31 +180,28 @@ struct WebView: UIViewRepresentable {
         }
         
         // MARK: - WKScriptMessageHandler
-        
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
             guard let body = message.body as? [String: String],
                   let action = body["action"] else {
                 return
             }
             
-            switch action {
-            case "close":
-                // 执行关闭操作
-                DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                switch action {
+                case "close":
                     self.onClose()
+                case "navigateBack":
+                    // Additional navigation functionality if needed
+                    break
+                default:
+                    break
                 }
-            case "navigateBack":
-                // 可以扩展其他导航功能
-                break
-            default:
-                break
             }
         }
         
         // MARK: - WKNavigationDelegate
-        
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            print("WebView finished loading")
+            print("WebView loaded successfully")
         }
         
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {

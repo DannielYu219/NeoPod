@@ -827,7 +827,7 @@
             logArea.insertBefore(logEntry, logArea.firstChild);
         }
 
-        function loadFiles() {
+        async function loadFiles() {
             addLog('正在读取文件列表...', 'info');
             
             if (typeof NeoPod === 'undefined' || !NeoPod.readDir) {
@@ -835,11 +835,8 @@
                 return;
             }
             
-            NeoPod.readDir('dev/', function(error, files) {
-                if (error) {
-                    addLog('读取目录失败: ' + error.message, 'error');
-                    return;
-                }
+            try {
+                const files = await NeoPod.readDir('dev/');
                 
                 const list = document.getElementById('fileList');
                 list.innerHTML = '';
@@ -866,10 +863,12 @@
                 
                 document.getElementById('fileCount').textContent = fileCount;
                 addLog('成功读取 ' + fileCount + ' 个文件', 'success');
-            });
+            } catch (error) {
+                addLog('读取目录失败: ' + error.message, 'error');
+            }
         }
 
-        function createFile() {
+        async function createFile() {
             const input = document.getElementById('fileInput');
             const text = input.value.trim();
             if (!text) {
@@ -888,19 +887,17 @@
                 return;
             }
             
-            NeoPod.writeFile('dev/' + filename, content,
-                function() {
-                    addLog('文件创建成功: ' + filename, 'success');
-                    input.value = '';
-                    loadFiles();
-                },
-                function(error) {
-                    addLog('文件创建失败: ' + error.message, 'error');
-                }
-            );
+            try {
+                await NeoPod.writeFile('dev/' + filename, content);
+                addLog('文件创建成功: ' + filename, 'success');
+                input.value = '';
+                loadFiles();
+            } catch (error) {
+                addLog('文件创建失败: ' + error.message, 'error');
+            }
         }
 
-        function deleteFile(filename) {
+        async function deleteFile(filename) {
             if (!confirm('确定要删除 ' + filename + ' 吗？')) return;
             
             addLog('正在删除文件: ' + filename, 'info');
@@ -910,15 +907,13 @@
                 return;
             }
             
-            NeoPod.deleteFile('dev/' + filename,
-                function() {
-                    addLog('文件删除成功: ' + filename, 'success');
-                    loadFiles();
-                },
-                function(error) {
-                    addLog('文件删除失败: ' + error.message, 'error');
-                }
-            );
+            try {
+                await NeoPod.deleteFile('dev/' + filename);
+                addLog('文件删除成功: ' + filename, 'success');
+                loadFiles();
+            } catch (error) {
+                addLog('文件删除失败: ' + error.message, 'error');
+            }
         }
 
         function updateTimeElapsed() {
