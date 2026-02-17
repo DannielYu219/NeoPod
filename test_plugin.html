@@ -28,6 +28,7 @@
         html {
             height: 100%;
             overflow: hidden;
+            min-height: 100%;
         }
 
         body {
@@ -36,13 +37,15 @@
             color: #ffffff;
             height: 100vh;
             height: 100%;
+            min-height: 100%;
             overflow: hidden;
             display: flex;
             flex-direction: column;
             padding: 0;
             margin: 0;
-            padding-top: var(--safe-area-inset-top);
-            padding-bottom: var(--safe-area-inset-bottom);
+            position: relative;
+            z-index: 1;
+            -webkit-overflow-scrolling: touch;
         }
 
         .app-container {
@@ -52,6 +55,21 @@
             overflow: hidden;
             padding: 0;
             margin: 0;
+            min-height: 100%;
+            position: relative;
+        }
+
+        /* 确保背景覆盖整个视口，包括安全区域 */
+        body::before {
+            content: '';
+            position: fixed;
+            top: calc(-1 * var(--safe-area-inset-top));
+            left: calc(-1 * var(--safe-area-inset-left));
+            right: calc(-1 * var(--safe-area-inset-right));
+            bottom: calc(-1 * var(--safe-area-inset-bottom));
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            z-index: -1;
+            pointer-events: none;
         }
 
         .top-bar {
@@ -680,14 +698,16 @@
         }
 
         function adjustLayout() {
-            const appContainer = document.querySelector('.app-container');
-            if (appContainer) {
-                appContainer.style.height = `${window.innerHeight}px`;
-            }
+            // 强制触发重排，确保安全区域正确应用
+            document.body.style.transform = 'translateZ(0)';
+            setTimeout(() => {
+                document.body.style.transform = '';
+            }, 0);
         }
 
         window.addEventListener('resize', adjustLayout);
         window.addEventListener('load', adjustLayout);
+        window.addEventListener('orientationchange', adjustLayout);
 
         setInterval(updateTimeElapsed, 1000);
         initColorPicker();
