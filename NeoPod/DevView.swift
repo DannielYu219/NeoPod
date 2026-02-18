@@ -25,7 +25,6 @@ struct DevView: View {
             
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
-                    // Header
                     HStack {
                         Text("\(viewModel.htmlFiles.count) programs")
                             .font(.system(size: 14, design: .rounded))
@@ -43,7 +42,6 @@ struct DevView: View {
                     .padding(.top, 16)
                     .padding(.bottom, 16)
                     
-                    // List 内容
                     if viewModel.htmlFiles.isEmpty && !viewModel.isLoading {
                         VStack(spacing: 12) {
                             Image(systemName: "doc.text")
@@ -51,7 +49,7 @@ struct DevView: View {
                                 .opacity(0.5)
                             Text("No HTML files")
                                 .font(.system(size: 18, weight: .bold, design: .rounded))
-                            Text("Place .html files in the 'dev' folder")
+                            Text("Place .html files in 'dev' or 'program' folder")
                                 .font(.system(size: 14, weight: .regular, design: .rounded))
                                 .foregroundColor(.white.opacity(0.5))
                         }
@@ -80,8 +78,6 @@ struct DevView: View {
     }
 }
 
-// MARK: - DevRowView
-
 private struct DevRowView: View {
     let file: HTMLFileInfo
     let accent: Color
@@ -94,21 +90,30 @@ private struct DevRowView: View {
                 let frame = proxy.frame(in: .named("devList"))
                 let distance = abs(frame.midY - containerMidY)
                 
-                let threshold: CGFloat = 36
                 let scale = max(0.86, 1.08 - (distance / 520))
                 let opacity = max(0.55, 1.0 - (distance / 700))
                 
                 HStack(spacing: 14) {
-                    Image(systemName: "doc.text.fill")
+                    Image(systemName: file.folder == "program" ? "app.fill" : "doc.text.fill")
                         .font(.system(size: 24, weight: .regular))
                         .foregroundColor(distance < 30 ? accent : .white.opacity(0.75))
                         .frame(width: 30, alignment: .leading)
                     
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(file.name)
-                            .font(.system(size: 32, weight: .regular, design: .rounded))
-                            .foregroundColor(distance < 30 ? accent : .white)
-                            .lineLimit(1)
+                        HStack {
+                            Text(file.name)
+                                .font(.system(size: 28, weight: .regular, design: .rounded))
+                                .foregroundColor(distance < 30 ? accent : .white)
+                                .lineLimit(1)
+                            
+                            Text(file.folder)
+                                .font(.system(size: 12, weight: .regular, design: .rounded))
+                                .foregroundColor(.white.opacity(0.5))
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.white.opacity(0.1))
+                                .cornerRadius(4)
+                        }
                         
                         Text(formatDate(file.modificationDate))
                             .font(.system(size: 14, weight: .regular, design: .rounded))
@@ -122,7 +127,7 @@ private struct DevRowView: View {
                 .scaleEffect(scale, anchor: .leading)
                 .opacity(opacity)
             }
-            .frame(height: 72)
+            .frame(height: 80)
         }
         .buttonStyle(.plain)
     }

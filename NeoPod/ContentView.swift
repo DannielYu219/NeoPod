@@ -25,6 +25,7 @@ struct ContentView: View {
         case music
         case video
         case chat
+        case store
         case setting
         case dev
     }
@@ -40,6 +41,7 @@ struct ContentView: View {
         MenuItem(title: "music", iconName: "music.note", destination: .music),
         MenuItem(title: "video", iconName: "play.rectangle", destination: .video),
         MenuItem(title: "chat", iconName: "message", destination: .chat),
+        MenuItem(title: "store", iconName: "app.badge", destination: .store),
         MenuItem(title: "setting", iconName: "gearshape", destination: .setting),
         MenuItem(title: "dev", iconName: "terminal", destination: .dev)
     ]
@@ -179,6 +181,8 @@ struct ContentView: View {
             VideoView()
         case .chat:
             ChatView()
+        case .store:
+            StoreView()
         case .setting:
             SettingView()
         case .dev:
@@ -200,6 +204,8 @@ struct ContentView: View {
             return "VIDEO"
         case .chat:
             return "CHAT"
+        case .store:
+            return "STORE"
         case .setting:
             return "SETTING"
         case .dev:
@@ -389,10 +395,13 @@ struct WebView: UIViewRepresentable {
         if url.isFileURL {
             let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             let devURL = FileSystemManager.devFolderURL()
+            let programURL = FileSystemManager.programFolderURL()
             let readAccessURL: URL
             
             if let devURL, url.path.hasPrefix(devURL.path) {
                 readAccessURL = devURL
+            } else if let programURL, url.path.hasPrefix(programURL.path) {
+                readAccessURL = programURL
             } else if let documentsURL, url.path.hasPrefix(documentsURL.path) {
                 readAccessURL = documentsURL
             } else {

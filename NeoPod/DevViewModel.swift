@@ -13,7 +13,7 @@ class DevViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        let files = FileSystemManager.htmlFilesInDevFolder()
+        let files = FileSystemManager.htmlFilesInDevAndProgramFolders()
         
         withAnimation(.easeOut(duration: 0.28)) {
             self.htmlFiles = files

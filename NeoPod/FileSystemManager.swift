@@ -37,6 +37,67 @@ enum FileSystemManager {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("dev", isDirectory: true)
     }
     
+    static func programFolderURL() -> URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("program", isDirectory: true)
+    }
+    
+    static func htmlFilesInDevAndProgramFolders() -> [HTMLFileInfo] {
+        var htmlFiles: [HTMLFileInfo] = []
+        
+        if let devURL = devFolderURL() {
+            htmlFiles.append(contentsOf: htmlFilesInDirectory(devURL, basePath: "dev"))
+        }
+        
+        if let programURL = programFolderURL() {
+            htmlFiles.append(contentsOf: htmlFilesInDirectory(programURL, basePath: "program"))
+        }
+        
+        htmlFiles.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        
+        return htmlFiles
+    }
+    
+    private static func htmlFilesInDirectory(_ directoryURL: URL, basePath: String) -> [HTMLFileInfo] {
+        var htmlFiles: [HTMLFileInfo] = []
+        
+        guard FileManager.default.fileExists(atPath: directoryURL.path) else { return htmlFiles }
+        
+        do {
+            let resourceKeys: [URLResourceKey] = [.isDirectoryKey, .isRegularFileKey, .contentModificationDateKey]
+            let enumerator = FileManager.default.enumerator(
+                at: directoryURL,
+                includingPropertiesForKeys: resourceKeys,
+                options: [.skipsHiddenFiles]
+            )
+            
+            while let url = enumerator?.nextObject() as? URL {
+                let resourceValues = try url.resourceValues(forKeys: Set(resourceKeys))
+                
+                if resourceValues.isRegularFile == true {
+                    let ext = url.pathExtension.lowercased()
+                    if ext == "html" || ext == "htm" {
+                        let relativePath = url.path.replacingOccurrences(of: directoryURL.path + "/", with: "")
+                        let displayName = relativePath.replacingOccurrences("/", with: " / ")
+                        let modificationDate = resourceValues.contentModificationDate ?? Date()
+                        
+                        let fileInfo = HTMLFileInfo(
+                            id: url.absoluteString,
+                            name: displayName,
+                            url: url,
+                            modificationDate: modificationDate,
+                            folder: basePath
+                        )
+                        htmlFiles.append(fileInfo)
+                    }
+                }
+            }
+        } catch {
+            print("Failed to read directory \(directoryURL.path): \(error)")
+        }
+        
+        return htmlFiles
+    }
+    
     static func htmlFilesInDevFolder() -> [HTMLFileInfo] {
         guard let devURL = devFolderURL() else { return [] }
         
@@ -52,7 +113,8 @@ enum FileSystemManager {
                     id: fileURL.absoluteString,
                     name: fileURL.deletingPathExtension().lastPathComponent,
                     url: fileURL,
-                    modificationDate: modificationDate
+                    modificationDate: modificationDate,
+                    folder: "dev"
                 )
                 htmlFiles.append(fileInfo)
             }
@@ -65,7 +127,6 @@ enum FileSystemManager {
         return htmlFiles
     }
     
-    // 生成 app:// URL
     static func appURL(for folder: String, path: String) -> URL? {
         guard allowedFolders.contains(folder.lowercased()) else { return nil }
         let urlString = "app://\(folder)/\(path)"
@@ -80,4 +141,13 @@ struct HTMLFileInfo: Identifiable, Equatable {
     let name: String
     let url: URL
     let modificationDate: Date
+    let folder: String
+    
+    init(id: String, name: String, url: URL, modificationDate: Date, folder: String = "dev") {
+        self.id = id
+        self.name = name
+        self.url = url
+        self.modificationDate = modificationDate
+        self.folder = folder
+    }
 }
