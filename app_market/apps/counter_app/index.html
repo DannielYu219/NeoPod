@@ -1,3 +1,10 @@
+<!--
+文件作用：计数器应用，支持增加、减少和重置计数
+依赖：无
+输入：用户点击按钮进行操作
+输出：实时显示当前计数值
+实现方式：使用JavaScript变量存储计数值，通过DOM操作更新显示
+-->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -17,11 +24,52 @@
             height: 100vh;
             display: flex;
             flex-direction: column;
+        }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .app-title {
+            font-size: 18px;
+            font-weight: 500;
+            color: #f57309;
+        }
+        .close-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #ffffff;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
             align-items: center;
             justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .close-btn:hover {
+            background: rgba(245, 115, 9, 0.3);
+            transform: rotate(90deg);
+        }
+        .close-btn:active {
+            transform: rotate(90deg) scale(0.9);
         }
         .container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
             text-align: center;
+            padding: 40px;
+        }
+        .card {
             padding: 40px;
             background: rgba(255, 255, 255, 0.05);
             border-radius: 16px;
@@ -71,18 +119,35 @@
     </style>
 </head>
 <body>
+    <div class="top-bar">
+        <div class="app-title">计数器</div>
+        <button class="close-btn" onclick="closeWindow()" aria-label="关闭">✕</button>
+    </div>
     <div class="container">
-        <h1>计数器</h1>
-        <div class="counter" id="counter">0</div>
-        <div class="buttons">
-            <button class="btn btn-secondary" onclick="decrement()">-</button>
-            <button class="btn" onclick="increment()">+</button>
-            <button class="btn btn-secondary" onclick="reset()">重置</button>
+        <div class="card">
+            <div class="counter" id="counter">0</div>
+            <div class="buttons">
+                <button class="btn btn-secondary" onclick="decrement()">-</button>
+                <button class="btn" onclick="increment()">+</button>
+                <button class="btn btn-secondary" onclick="reset()">重置</button>
+            </div>
         </div>
     </div>
     <script>
         let count = 0;
         const counterEl = document.getElementById('counter');
+        
+        function closeWindow() {
+            try {
+                if (typeof NeoPod !== 'undefined' && NeoPod.close) {
+                    NeoPod.close();
+                } else {
+                    window.close();
+                }
+            } catch (error) {
+                console.log('无法关闭窗口:', error);
+            }
+        }
         
         function increment() {
             count++;

@@ -101,7 +101,7 @@ private struct DevRowView: View {
                     
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
-                            Text(file.name)
+                            Text(file.displayName)
                                 .font(.system(size: 28, weight: .regular, design: .rounded))
                                 .foregroundColor(distance < 30 ? accent : .white)
                                 .lineLimit(1)

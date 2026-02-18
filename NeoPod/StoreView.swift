@@ -1,4 +1,5 @@
 import SwiftUI
+internal import Combine
 
 struct StoreView: View {
     @StateObject private var viewModel = StoreViewModel()

@@ -52,7 +52,7 @@ enum FileSystemManager {
             htmlFiles.append(contentsOf: htmlFilesInDirectory(programURL, basePath: "program"))
         }
         
-        htmlFiles.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        htmlFiles.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
         
         return htmlFiles
     }
@@ -77,12 +77,14 @@ enum FileSystemManager {
                     let ext = url.pathExtension.lowercased()
                     if ext == "html" || ext == "htm" {
                         let relativePath = url.path.replacingOccurrences(of: directoryURL.path + "/", with: "")
-                        let displayName = relativePath.replacingOccurrences(of: "/", with: " / ")
                         let modificationDate = resourceValues.contentModificationDate ?? Date()
+                        
+                        let displayName = getDisplayName(for: url, relativePath: relativePath, basePath: basePath)
                         
                         let fileInfo = HTMLFileInfo(
                             id: url.absoluteString,
-                            name: displayName,
+                            name: relativePath,
+                            displayName: displayName,
                             url: url,
                             modificationDate: modificationDate,
                             folder: basePath
@@ -96,6 +98,42 @@ enum FileSystemManager {
         }
         
         return htmlFiles
+    }
+    
+    private static func getDisplayName(for htmlURL: URL, relativePath: String, basePath: String) -> String {
+        if basePath == "program" {
+            let pathComponents = relativePath.split(separator: "/")
+            if let appId = pathComponents.first {
+                let appFolderURL = htmlURL.deletingLastPathComponent()
+                while appFolderURL.lastPathComponent != String(appId) && appFolderURL.path != "/" {
+                    break
+                }
+                
+                let infoURL = htmlURL.deletingLastPathComponent()
+                    .appendingPathComponent("info.json")
+                
+                if let info = readAppInfo(from: infoURL) {
+                    return info.name
+                }
+                
+                return String(appId)
+            }
+        }
+        
+        return relativePath.replacingOccurrences(of: "/", with: " / ")
+    }
+    
+    private static func readAppInfo(from url: URL) -> AppInfoFile? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        
+        do {
+            let data = try Data(contentsOf: url)
+            let info = try JSONDecoder().decode(AppInfoFile.self, from: data)
+            return info
+        } catch {
+            print("Failed to read app info: \(error)")
+            return nil
+        }
     }
     
     static func htmlFilesInDevFolder() -> [HTMLFileInfo] {
@@ -112,6 +150,7 @@ enum FileSystemManager {
                 let fileInfo = HTMLFileInfo(
                     id: fileURL.absoluteString,
                     name: fileURL.deletingPathExtension().lastPathComponent,
+                    displayName: fileURL.deletingPathExtension().lastPathComponent,
                     url: fileURL,
                     modificationDate: modificationDate,
                     folder: "dev"
@@ -119,7 +158,7 @@ enum FileSystemManager {
                 htmlFiles.append(fileInfo)
             }
             
-            htmlFiles.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+            htmlFiles.sort { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
         } catch {
             print("Failed to read dev folder: \(error)")
         }
@@ -136,16 +175,28 @@ enum FileSystemManager {
     static let allowedFolders = ["music", "video", "config", "cache", "program", "dev"]
 }
 
+struct AppInfoFile: Codable {
+    let name: String
+    let version: String
+    let description: String?
+    let author: String?
+    let last_updated: String?
+    let icon: String?
+    let main_file: String?
+}
+
 struct HTMLFileInfo: Identifiable, Equatable {
     let id: String
     let name: String
+    let displayName: String
     let url: URL
     let modificationDate: Date
     let folder: String
     
-    init(id: String, name: String, url: URL, modificationDate: Date, folder: String = "dev") {
+    init(id: String, name: String, displayName: String? = nil, url: URL, modificationDate: Date, folder: String = "dev") {
         self.id = id
         self.name = name
+        self.displayName = displayName ?? name
         self.url = url
         self.modificationDate = modificationDate
         self.folder = folder
