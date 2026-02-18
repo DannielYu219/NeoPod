@@ -1,0 +1,9 @@
+{
+  "name": "待办事项应用",
+  "version": "1.0.0",
+  "description": "一个简单的待办事项管理应用",
+  "author": "NeoPod Team",
+  "last_updated": "2026-02-18",
+  "icon": "icon.png",
+  "main_file": "index.html"
+}

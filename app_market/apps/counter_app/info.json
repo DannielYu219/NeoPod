@@ -1,0 +1,9 @@
+{
+  "name": "计数器应用",
+  "version": "1.0.0",
+  "description": "一个简单的计数器应用",
+  "author": "NeoPod Team",
+  "last_updated": "2026-02-18",
+  "icon": "icon.png",
+  "main_file": "index.html"
+}

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>待办事项应用</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            padding: 40px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        h1 {
+            font-size: 32px;
+            margin-bottom: 40px;
+            color: #f57309;
+        }
+        .todo-input {
+            width: 100%;
+            padding: 16px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 16px;
+            margin-bottom: 16px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+        .todo-input:focus {
+            border-color: #f57309;
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .todo-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+        .todo-list {
+            list-style: none;
+            max-height: 300px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+        .todo-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            transition: all 0.2s ease;
+        }
+        .todo-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .todo-checkbox {
+            width: 24px;
+            height: 24px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+        .todo-checkbox.checked {
+            background: #f57309;
+            border-color: #f57309;
+        }
+        .todo-checkbox.checked::after {
+            content: '✓';
+            color: #ffffff;
+            font-size: 14px;
+        }
+        .todo-text {
+            flex: 1;
+            font-size: 16px;
+            text-align: left;
+        }
+        .todo-text.completed {
+            text-decoration: line-through;
+            opacity: 0.5;
+        }
+        .todo-delete {
+            color: #ff4757;
+            cursor: pointer;
+            font-size: 20px;
+            opacity: 0;
+            transition: all 0.2s ease;
+            padding: 4px;
+        }
+        .todo-item:hover .todo-delete {
+            opacity: 1;
+        }
+        .todo-stats {
+            margin-top: 20px;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>待办事项</h1>
+        <input type="text" class="todo-input" id="todoInput" placeholder="添加新的待办事项..." onkeypress="handleKeypress(event)">
+        <ul class="todo-list" id="todoList"></ul>
+        <div class="todo-stats" id="todoStats">待办事项: 0</div>
+    </div>
+    <script>
+        let todos = [];
+        
+        function handleKeypress(event) {
+            if (event.key === 'Enter') {
+                addTodo();
+            }
+        }
+        
+        function addTodo() {
+            const input = document.getElementById('todoInput');
+            const text = input.value.trim();
+            
+            if (text) {
+                const todo = {
+                    id: Date.now(),
+                    text: text,
+                    completed: false
+                };
+                
+                todos.push(todo);
+                renderTodos();
+                input.value = '';
+            }
+        }
+        
+        function toggleTodo(id) {
+            todos = todos.map(todo => {
+                if (todo.id === id) {
+                    return { ...todo, completed: !todo.completed };
+                }
+                return todo;
+            });
+            renderTodos();
+        }
+        
+        function deleteTodo(id) {
+            todos = todos.filter(todo => todo.id !== id);
+            renderTodos();
+        }
+        
+        function renderTodos() {
+            const list = document.getElementById('todoList');
+            const stats = document.getElementById('todoStats');
+            
+            list.innerHTML = todos.map(todo => `
+                <li class="todo-item">
+                    <div class="todo-checkbox ${todo.completed ? 'checked' : ''}" onclick="toggleTodo(${todo.id})"></div>
+                    <span class="todo-text ${todo.completed ? 'completed' : ''}">${todo.text}</span>
+                    <span class="todo-delete" onclick="deleteTodo(${todo.id})">×</span>
+                </li>
+            `).join('');
+            
+            const pendingCount = todos.filter(todo => !todo.completed).length;
+            stats.textContent = `待办事项: ${pendingCount}`;
+        }
+        
+        // 初始化示例待办事项
+        todos = [
+            { id: 1, text: '测试待办事项', completed: false },
+            { id: 2, text: '完成应用开发', completed: false }
+        ];
+        renderTodos();
+    </script>
+</body>
+</html>
