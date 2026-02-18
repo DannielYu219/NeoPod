@@ -77,7 +77,7 @@ enum FileSystemManager {
                     let ext = url.pathExtension.lowercased()
                     if ext == "html" || ext == "htm" {
                         let relativePath = url.path.replacingOccurrences(of: directoryURL.path + "/", with: "")
-                        let displayName = relativePath.replacingOccurrences("/", with: " / ")
+                        let displayName = relativePath.replacingOccurrences(of: "/", with: " / ")
                         let modificationDate = resourceValues.contentModificationDate ?? Date()
                         
                         let fileInfo = HTMLFileInfo(

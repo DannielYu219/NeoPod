@@ -1,4 +1,5 @@
 import Foundation
+internal import Combine
 
 class StoreSettings: ObservableObject {
     static let shared = StoreSettings()

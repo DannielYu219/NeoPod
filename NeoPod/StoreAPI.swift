@@ -1,4 +1,5 @@
 import Foundation
+import Compression
 
 struct AppInfo: Identifiable, Codable {
     let id: String
@@ -95,8 +96,8 @@ class StoreAPI {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    try ZipArchive.unzipFile(at: zipFile, to: appURL)
-                    try FileManager.default.removeItem(at: zipFile)
+                    try ZipExtractor.unzip(file: zipFile, to: appURL)
+                    try? FileManager.default.removeItem(at: zipFile)
                     continuation.resume()
                 } catch {
                     continuation.resume(throwing: error)
@@ -126,8 +127,84 @@ enum StoreError: LocalizedError {
     }
 }
 
-enum ZipArchive {
-    static func unzipFile(at source: URL, to destination: URL) throws {
-        try FileManager.default.unzipItem(at: source, to: destination)
+enum ZipExtractor {
+    static func unzip(file sourceURL: URL, to destinationURL: URL) throws {
+        let fileManager = FileManager.default
+        let data = try Data(contentsOf: sourceURL)
+        
+        var offset = 0
+        
+        while offset < data.count - 4 {
+            let signature = data.subdata(in: offset..<offset+4).withUnsafeBytes { $0.load(as: UInt32.self) }
+            
+            if signature == 0x04034b50 {
+                let headerData = data.subdata(in: offset+4..<offset+30)
+                
+                let compressionMethod = headerData.subdata(in: 4..<6).withUnsafeBytes { $0.load(as: UInt16.self) }
+                let compressedSize = UInt32(littleEndian: headerData.subdata(in: 14..<18).withUnsafeBytes { $0.load(as: UInt32.self) })
+                let uncompressedSize = UInt32(littleEndian: headerData.subdata(in: 18..<22).withUnsafeBytes { $0.load(as: UInt32.self) })
+                let fileNameLength = UInt16(littleEndian: headerData.subdata(in: 22..<24).withUnsafeBytes { $0.load(as: UInt16.self) })
+                let extraFieldLength = UInt16(littleEndian: headerData.subdata(in: 24..<26).withUnsafeBytes { $0.load(as: UInt16.self) })
+                
+                let fileNameStart = offset + 30
+                let fileNameEnd = fileNameStart + Int(fileNameLength)
+                let fileNameData = data.subdata(in: fileNameStart..<fileNameEnd)
+                guard let fileName = String(data: fileNameData, encoding: .utf8) else {
+                    offset += 30 + Int(fileNameLength) + Int(extraFieldLength) + Int(compressedSize)
+                    continue
+                }
+                
+                let fileDataStart = fileNameEnd + Int(extraFieldLength)
+                let fileDataEnd = fileDataStart + Int(compressedSize)
+                let fileData = data.subdata(in: fileDataStart..<fileDataEnd)
+                
+                let fileURL = destinationURL.appendingPathComponent(fileName)
+                let directoryURL = fileURL.deletingLastPathComponent()
+                
+                if !fileManager.fileExists(atPath: directoryURL.path) {
+                    try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+                }
+                
+                if fileName.hasSuffix("/") {
+                    try fileManager.createDirectory(at: fileURL, withIntermediateDirectories: true)
+                } else {
+                    let outputData: Data
+                    if compressionMethod == 0 {
+                        outputData = fileData
+                    } else if compressionMethod == 8 {
+                        outputData = try decompressDeflate(data: fileData, expectedSize: Int(uncompressedSize))
+                    } else {
+                        throw NSError(domain: "ZipExtractor", code: 3, userInfo: [NSLocalizedDescriptionKey: "Unsupported compression method"])
+                    }
+                    try outputData.write(to: fileURL)
+                }
+                
+                offset = fileDataEnd
+            } else {
+                offset += 1
+            }
+        }
+    }
+    
+    private static func decompressDeflate(data: Data, expectedSize: Int) throws -> Data {
+        let output = NSMutableData(length: expectedSize)!
+        let outputPtr = output.mutableBytes.assumingMemoryBound(to: UInt8.self)
+        
+        let inputPtr = (data as NSData).bytes.assumingMemoryBound(to: UInt8.self)
+        
+        let result = compression_decode_buffer(
+            outputPtr,
+            expectedSize,
+            inputPtr,
+            data.count,
+            nil,
+            COMPRESSION_ZLIB
+        )
+        
+        if result == 0 {
+            throw NSError(domain: "ZipExtractor", code: 2, userInfo: [NSLocalizedDescriptionKey: "Decompression failed"])
+        }
+        
+        return output as Data
     }
 }
