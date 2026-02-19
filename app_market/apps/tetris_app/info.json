@@ -1,0 +1,9 @@
+{
+  "name": "俄罗斯方块",
+  "version": "1.0.0",
+  "description": "触屏优化的俄罗斯方块游戏，支持手势操作和键盘控制",
+  "author": "NeoPod Team",
+  "last_updated": "2026-02-19",
+  "icon": "icon.png",
+  "main_file": "index.html"
+}
