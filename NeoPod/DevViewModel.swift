@@ -50,6 +50,7 @@ class DevViewModel: ObservableObject {
         Task {
             do {
                 let appId = extractAppId(from: file)
+                print("Uninstalling app with ID: \(appId)")
                 try await StoreAPI.shared.uninstallApp(appId: appId)
                 
                 await MainActor.run {
@@ -58,6 +59,7 @@ class DevViewModel: ObservableObject {
                     loadHTMLFiles()
                 }
             } catch {
+                print("Uninstall failed: \(error)")
                 await MainActor.run {
                     errorMessage = "Failed to uninstall: \(error.localizedDescription)"
                     uninstallingAppId = nil
@@ -69,6 +71,8 @@ class DevViewModel: ObservableObject {
     
     private func extractAppId(from file: HTMLFileInfo) -> String {
         let pathComponents = file.name.split(separator: "/")
-        return pathComponents.first.map(String.init) ?? file.displayName
+        let appId = pathComponents.first.map(String.init) ?? file.displayName
+        print("Extracting appId from '\(file.name)' -> '\(appId)'")
+        return appId
     }
 }

@@ -87,7 +87,7 @@ class StoreAPI {
         let programURL = documentsURL.appendingPathComponent("program", isDirectory: true)
         let appURL = programURL.appendingPathComponent(appId, isDirectory: true)
         
-        if FileManager.default.fileExists(atPath: appURL.path) {
+        if FileManager.default.fileExists(atPath: appURL.path()) {
             try FileManager.default.removeItem(at: appURL)
         }
         
@@ -108,17 +108,35 @@ class StoreAPI {
     
     func uninstallApp(appId: String) async throws {
         guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            print("Failed to get documents directory")
             throw StoreError.installFailed
         }
         
         let programURL = documentsURL.appendingPathComponent("program", isDirectory: true)
         let appURL = programURL.appendingPathComponent(appId, isDirectory: true)
         
-        guard FileManager.default.fileExists(atPath: appURL.path) else {
+        print("Attempting to uninstall app at: \(appURL.path())")
+        print("Documents URL: \(documentsURL.path())")
+        print("Program URL: \(programURL.path())")
+        print("App URL: \(appURL.path())")
+        
+        var isDirectory: ObjCBool = false
+        let exists = FileManager.default.fileExists(atPath: appURL.path(), isDirectory: &isDirectory)
+        
+        print("App exists: \(exists), isDirectory: \(isDirectory.boolValue)")
+        
+        guard exists else {
+            print("App folder does not exist at: \(appURL.path())")
             throw StoreError.installFailed
         }
         
-        try FileManager.default.removeItem(at: appURL)
+        do {
+            try FileManager.default.removeItem(at: appURL)
+            print("Successfully removed app at: \(appURL.path())")
+        } catch {
+            print("Failed to remove app: \(error)")
+            throw error
+        }
     }
 }
 
@@ -176,7 +194,7 @@ enum ZipExtractor {
                 let fileURL = destinationURL.appendingPathComponent(fileName)
                 let directoryURL = fileURL.deletingLastPathComponent()
                 
-                if !fileManager.fileExists(atPath: directoryURL.path) {
+                if !fileManager.fileExists(atPath: directoryURL.path()) {
                     try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
                 }
                 
