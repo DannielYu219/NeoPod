@@ -310,10 +310,10 @@
         let particles = [];
         let levelWidth = 0;
         
-        const GRAVITY = 0.6;
-        const JUMP_FORCE = -12;
-        const MOVE_SPEED = 4;
-        const MAX_FALL_SPEED = 15;
+        const GRAVITY = 0.5;
+        const JUMP_FORCE = -16;
+        const MOVE_SPEED = 5;
+        const MAX_FALL_SPEED = 12;
         
         const keys = {
             left: false,
@@ -330,11 +330,11 @@
             for (let x = 0; x < tilesX * 8; x++) {
                 let groundHeight = 2;
                 
-                if (x > 5 && x < 8) groundHeight = 0;
-                if (x > 12 && x < 15) groundHeight = 0;
-                if (x > 20 && x < 23) groundHeight = 0;
-                if (x > 30 && x < 34) groundHeight = 1;
-                if (x > 40 && x < 44) groundHeight = 1;
+                if (x > 8 && x < 11) groundHeight = 0;
+                if (x > 18 && x < 21) groundHeight = 0;
+                if (x > 28 && x < 31) groundHeight = 0;
+                if (x > 38 && x < 41) groundHeight = 1;
+                if (x > 48 && x < 51) groundHeight = 1;
                 
                 for (let y = tilesY - groundHeight; y < tilesY; y++) {
                     platforms.push({
@@ -348,12 +348,12 @@
             }
             
             const floatingPlatforms = [
-                { x: 6, y: tilesY - 5, w: 3 },
-                { x: 15, y: tilesY - 4, w: 4 },
-                { x: 25, y: tilesY - 5, w: 3 },
-                { x: 35, y: tilesY - 4, w: 3 },
-                { x: 45, y: tilesY - 5, w: 4 },
-                { x: 55, y: tilesY - 4, w: 3 }
+                { x: 9, y: tilesY - 5, w: 3 },
+                { x: 19, y: tilesY - 4, w: 3 },
+                { x: 29, y: tilesY - 5, w: 3 },
+                { x: 39, y: tilesY - 4, w: 3 },
+                { x: 49, y: tilesY - 5, w: 3 },
+                { x: 60, y: tilesY - 4, w: 3 }
             ];
             
             floatingPlatforms.forEach(p => {
@@ -370,21 +370,18 @@
             
             const coinPositions = [
                 { x: 4, y: tilesY - 3 },
-                { x: 7, y: tilesY - 6 },
-                { x: 8, y: tilesY - 6 },
-                { x: 16, y: tilesY - 5 },
-                { x: 17, y: tilesY - 5 },
-                { x: 18, y: tilesY - 5 },
-                { x: 26, y: tilesY - 6 },
-                { x: 36, y: tilesY - 5 },
-                { x: 46, y: tilesY - 6 },
-                { x: 47, y: tilesY - 6 },
-                { x: 56, y: tilesY - 5 },
-                { x: 10, y: tilesY - 3 },
-                { x: 22, y: tilesY - 3 },
-                { x: 32, y: tilesY - 3 },
-                { x: 42, y: tilesY - 3 },
-                { x: 52, y: tilesY - 3 }
+                { x: 10, y: tilesY - 6 },
+                { x: 11, y: tilesY - 6 },
+                { x: 20, y: tilesY - 5 },
+                { x: 21, y: tilesY - 5 },
+                { x: 30, y: tilesY - 6 },
+                { x: 40, y: tilesY - 5 },
+                { x: 50, y: tilesY - 6 },
+                { x: 15, y: tilesY - 3 },
+                { x: 25, y: tilesY - 3 },
+                { x: 35, y: tilesY - 3 },
+                { x: 45, y: tilesY - 3 },
+                { x: 55, y: tilesY - 3 }
             ];
             
             coinPositions.forEach(c => {
@@ -399,12 +396,11 @@
             });
             
             const enemyPositions = [
-                { x: 8, y: tilesY - 3 },
-                { x: 18, y: tilesY - 3 },
-                { x: 28, y: tilesY - 3 },
-                { x: 38, y: tilesY - 4 },
-                { x: 48, y: tilesY - 4 },
-                { x: 58, y: tilesY - 3 }
+                { x: 12, y: tilesY - 3 },
+                { x: 24, y: tilesY - 3 },
+                { x: 36, y: tilesY - 3 },
+                { x: 46, y: tilesY - 4 },
+                { x: 56, y: tilesY - 3 }
             ];
             
             enemyPositions.forEach(e => {
@@ -604,10 +600,12 @@
             if (keys.left) {
                 player.vx = -MOVE_SPEED;
                 player.facingRight = false;
-            } else if (keys.right) {
+            }
+            if (keys.right) {
                 player.vx = MOVE_SPEED;
                 player.facingRight = true;
-            } else {
+            }
+            if (!keys.left && !keys.right) {
                 player.vx *= 0.8;
             }
             
