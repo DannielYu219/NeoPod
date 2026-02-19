@@ -46,8 +46,7 @@ class SMBClient: ObservableObject {
     @Published var currentServer: SMBServerConfig?
     @Published var connectionError: String?
     
-    private var client: AMSMB2?
-    private var share: AMSMB2Share?
+    private var client: SMB2Manager?
     
     private init() {}
     
@@ -57,13 +56,20 @@ class SMBClient: ObservableObject {
         }
         
         let url = URL(string: "smb://\(config.host):\(config.port)")!
-        client = AMSMB2(url: url, domain: config.domain.isEmpty ? "WORKGROUP" : config.domain, username: config.username, password: config.password)
+        let credential = URLCredential(
+            user: config.username,
+            password: config.password,
+            persistence: .forSession
+        )
         
-        client?.timeout = 30
+        guard let smbClient = SMB2Manager(url: url, credential: credential, domain: config.domain.isEmpty ? "WORKGROUP" : config.domain) else {
+            throw SMBClientError.connectionFailed("Failed to create SMB client")
+        }
+        
+        client = smbClient
         
         do {
-            try await client?.connect()
-            share = try await client?.share(name: config.shareName)
+            try await client?.connectShare(name: config.shareName)
             
             await MainActor.run {
                 self.currentServer = config
@@ -79,29 +85,44 @@ class SMBClient: ObservableObject {
     }
     
     func disconnect() {
-        share = nil
+        Task {
+            try? await client?.disconnectShare()
+        }
         client = nil
         isConnected = false
         currentServer = nil
     }
     
     func listDirectory(path: String = "/") async throws -> [SMBFileItem] {
-        guard let share = share else {
+        guard let client = client else {
             throw SMBClientError.notConnected
         }
         
-        let items = try await share.listDirectory(atPath: path)
+        let items = try await client.contentsOfDirectory(atPath: path)
         
-        return items.compactMap { item -> SMBFileItem? in
-            let name = item.name
+        return items.compactMap { entry -> SMBFileItem? in
+            guard let name = entry[.nameKey] as? String else { return nil }
             if name == "." || name == ".." { return nil }
+            
+            let isDirectory = (entry[.fileResourceTypeKey] as? URLFileResourceType) == .directory
+            let size = entry[.fileSizeKey] as? Int64 ?? 0
+            let modDate = entry[.contentModificationDateKey] as? Date
+            
+            let itemPath: String
+            if path == "/" {
+                itemPath = "/\(name)"
+            } else if path.hasSuffix("/") {
+                itemPath = "\(path)\(name)"
+            } else {
+                itemPath = "\(path)/\(name)"
+            }
             
             return SMBFileItem(
                 name: name,
-                path: path.hasSuffix("/") ? "\(path)\(name)" : "\(path)/\(name)",
-                isDirectory: item.isDirectory,
-                size: item.fileSize,
-                modificationDate: item.modificationDate
+                path: itemPath,
+                isDirectory: isDirectory,
+                size: size,
+                modificationDate: modDate
             )
         }.sorted { lhs, rhs in
             if lhs.isDirectory != rhs.isDirectory {
@@ -112,32 +133,32 @@ class SMBClient: ObservableObject {
     }
     
     func readFile(at path: String) async throws -> Data {
-        guard let share = share else {
+        guard let client = client else {
             throw SMBClientError.notConnected
         }
         
-        return try await share.readData(atPath: path)
+        return try await client.contents(atPath: path)
     }
     
     func streamFile(at path: String, offset: Int64 = 0, length: Int? = nil) async throws -> Data {
-        guard let share = share else {
+        guard let client = client else {
             throw SMBClientError.notConnected
         }
         
         if let length = length {
-            return try await share.readData(atPath: path, offset: UInt64(offset), length: length)
+            return try await client.contents(atPath: path, offset: UInt64(offset), length: length)
         } else {
-            return try await share.readData(atPath: path, offset: UInt64(offset))
+            return try await client.contents(atPath: path, offset: UInt64(offset))
         }
     }
     
     func fileExists(at path: String) async throws -> Bool {
-        guard let share = share else {
+        guard let client = client else {
             throw SMBClientError.notConnected
         }
         
         do {
-            let _ = try await share.attributesOfItem(atPath: path)
+            let _ = try await client.attributesOfItem(atPath: path)
             return true
         } catch {
             return false
@@ -145,28 +166,32 @@ class SMBClient: ObservableObject {
     }
     
     func getFileInfo(at path: String) async throws -> SMBFileItem {
-        guard let share = share else {
+        guard let client = client else {
             throw SMBClientError.notConnected
         }
         
-        let attrs = try await share.attributesOfItem(atPath: path)
+        let attrs = try await client.attributesOfItem(atPath: path)
         let name = URL(fileURLWithPath: path).lastPathComponent
+        
+        let isDirectory = (attrs[.fileResourceTypeKey] as? URLFileResourceType) == .directory
+        let size = attrs[.fileSizeKey] as? Int64 ?? 0
+        let modDate = attrs[.contentModificationDateKey] as? Date
         
         return SMBFileItem(
             name: name,
             path: path,
-            isDirectory: attrs.isDirectory,
-            size: attrs.fileSize,
-            modificationDate: attrs.modificationDate
+            isDirectory: isDirectory,
+            size: size,
+            modificationDate: modDate
         )
     }
     
     func downloadFile(at path: String, to localURL: URL, progress: ((Double) -> Void)? = nil) async throws {
-        guard let share = share else {
+        guard let client = client else {
             throw SMBClientError.notConnected
         }
         
-        try await share.downloadItem(atPath: path, to: localURL, progress: progress)
+        try await client.downloadItem(atPath: path, to: localURL, progress: progress)
     }
     
     func getStreamingURL(for path: String) -> URL? {
