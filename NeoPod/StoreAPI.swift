@@ -27,6 +27,24 @@ struct AppListResponse: Codable {
     let apps: [AppInfo]
 }
 
+struct AppDetail: Identifiable, Codable {
+    let id: String
+    let name: String
+    let version: String
+    let description: String
+    let icon: String
+    let size: Int
+    let last_updated: String
+    let files: [String]
+
+    var formattedSize: String {
+        let formatter = ByteCountFormatter()
+        formatter.allowedUnits = [.useKB, .useMB]
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: Int64(size))
+    }
+}
+
 class StoreAPI {
     static let shared = StoreAPI()
     
@@ -52,6 +70,27 @@ class StoreAPI {
         
         let appListResponse = try JSONDecoder().decode(AppListResponse.self, from: data)
         return appListResponse.apps
+    }
+
+    func getAppDetail(appId: String) async throws -> AppDetail {
+        let serverAddress = StoreSettings.shared.serverAddress
+        guard !serverAddress.isEmpty else {
+            throw StoreError.serverNotConfigured
+        }
+
+        let urlString = "\(serverAddress)/api/apps/\(appId)"
+        guard let url = URL(string: urlString) else {
+            throw StoreError.invalidURL
+        }
+
+        let (data, response) = try await URLSession.shared.data(from: url)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw StoreError.serverError
+        }
+
+        return try JSONDecoder().decode(AppDetail.self, from: data)
     }
     
     func downloadApp(appId: String) async throws -> URL {
@@ -107,34 +146,40 @@ class StoreAPI {
     }
     
     func uninstallApp(appId: String) async throws {
+        print("[StoreAPI] uninstallApp called with appId: \(appId)")
+        
         guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            print("Failed to get documents directory")
+            print("[StoreAPI] Failed to get documents directory")
             throw StoreError.installFailed
         }
         
         let programURL = documentsURL.appendingPathComponent("program", isDirectory: true)
         let appURL = programURL.appendingPathComponent(appId, isDirectory: true)
         
-        print("Attempting to uninstall app at: \(appURL.path())")
-        print("Documents URL: \(documentsURL.path())")
-        print("Program URL: \(programURL.path())")
-        print("App URL: \(appURL.path())")
+        print("[StoreAPI] Documents URL: \(documentsURL.path())")
+        print("[StoreAPI] Program URL: \(programURL.path())")
+        print("[StoreAPI] App URL: \(appURL.path())")
         
         var isDirectory: ObjCBool = false
         let exists = FileManager.default.fileExists(atPath: appURL.path(), isDirectory: &isDirectory)
         
-        print("App exists: \(exists), isDirectory: \(isDirectory.boolValue)")
+        print("[StoreAPI] App exists: \(exists), isDirectory: \(isDirectory.boolValue)")
         
         guard exists else {
-            print("App folder does not exist at: \(appURL.path())")
-            throw StoreError.installFailed
+            print("[StoreAPI] App folder does not exist at: \(appURL.path())")
+            
+            if let contents = try? FileManager.default.contentsOfDirectory(atPath: programURL.path()) {
+                print("[StoreAPI] Contents of program folder: \(contents)")
+            }
+            
+            throw StoreError.appNotFound(appId)
         }
         
         do {
             try FileManager.default.removeItem(at: appURL)
-            print("Successfully removed app at: \(appURL.path())")
+            print("[StoreAPI] Successfully removed app at: \(appURL.path())")
         } catch {
-            print("Failed to remove app: \(error)")
+            print("[StoreAPI] Failed to remove app: \(error)")
             throw error
         }
     }
@@ -145,6 +190,7 @@ enum StoreError: LocalizedError {
     case invalidURL
     case serverError
     case installFailed
+    case appNotFound(String)
     
     var errorDescription: String? {
         switch self {
@@ -156,6 +202,8 @@ enum StoreError: LocalizedError {
             return "Server error"
         case .installFailed:
             return "Installation failed"
+        case .appNotFound(let appId):
+            return "App '\(appId)' not found in program folder"
         }
     }
 }

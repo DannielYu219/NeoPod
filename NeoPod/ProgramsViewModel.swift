@@ -57,6 +57,11 @@ class ProgramsViewModel: ObservableObject {
 
         let appId = extractAppId(from: file)
         print("[ProgramsViewModel] confirmUninstall: appId=\(appId), file.id=\(file.id)")
+        print("[ProgramsViewModel] file.name=\(file.name)")
+        print("[ProgramsViewModel] file.displayName=\(file.displayName)")
+        print("[ProgramsViewModel] file.url=\(file.url)")
+        print("[ProgramsViewModel] file.folder=\(file.folder)")
+        
         uninstallingAppId = file.id
         showUninstallConfirm = false
 
