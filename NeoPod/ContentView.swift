@@ -27,7 +27,7 @@ struct ContentView: View {
         case chat
         case store
         case setting
-        case dev
+        case programs
     }
     
     private struct MenuItem: Identifiable {
@@ -43,7 +43,7 @@ struct ContentView: View {
         MenuItem(title: "chat", iconName: "message", destination: .chat),
         MenuItem(title: "store", iconName: "app.badge", destination: .store),
         MenuItem(title: "setting", iconName: "gearshape", destination: .setting),
-        MenuItem(title: "dev", iconName: "terminal", destination: .dev)
+        MenuItem(title: "programs", iconName: "terminal", destination: .programs)
     ]
     
     private let accent = Color(red: 0.96, green: 0.45, blue: 0.15)
@@ -185,8 +185,8 @@ struct ContentView: View {
             StoreView()
         case .setting:
             SettingView()
-        case .dev:
-            DevView(onFileSelected: { file in
+        case .programs:
+            ProgramsView(onFileSelected: { file in
                 withAnimation(.easeOut(duration: 0.28)) {
                     devSelectedFile = file
                 }
@@ -208,8 +208,8 @@ struct ContentView: View {
             return "STORE"
         case .setting:
             return "SETTING"
-        case .dev:
-            return "DEV"
+        case .programs:
+            return "PROGRAMS"
         }
     }
     

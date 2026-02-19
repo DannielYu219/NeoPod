@@ -186,10 +186,17 @@ private struct StoreRowView: View {
                             .foregroundColor(.white.opacity(0.5))
                     }
                     
-                    Text(app.description)
-                        .font(.system(size: 14, weight: .regular, design: .rounded))
-                        .foregroundColor(.white.opacity(0.5))
-                        .lineLimit(1)
+                    if isInstalled {
+                        Text("installed")
+                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .foregroundColor(accent.opacity(0.8))
+                            .lineLimit(1)
+                    } else {
+                        Text(app.description)
+                            .font(.system(size: 14, weight: .regular, design: .rounded))
+                            .foregroundColor(.white.opacity(0.5))
+                            .lineLimit(1)
+                    }
                 }
                 
                 Spacer()
