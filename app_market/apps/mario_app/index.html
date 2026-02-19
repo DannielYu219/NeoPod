@@ -1,15 +1,19 @@
 <!--
 文件作用：复古像素风格Mario类横版卷轴游戏
 依赖：无外部依赖，纯HTML/CSS/JavaScript实现
-输入：键盘方向键/WASD控制移动跳跃，触屏按钮控制
+输入：键盘方向键/WASD控制移动跳跃，触屏按钮控制，USB手柄支持
 输出：游戏画面渲染、分数显示、游戏状态
 实现方式：使用Canvas绘制像素风格图形，实现物理引擎、碰撞检测、关卡系统
+          支持横屏模式，支持标准USB手柄(Gamepad API)
 -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="screen-orientation" content="landscape">
+    <meta name="x5-orientation" content="landscape">
+    <meta name="full-screen" content="yes">
     <title>像素冒险</title>
     <style>
         * {
@@ -19,15 +23,104 @@
             -webkit-tap-highlight-color: transparent;
             user-select: none;
         }
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
         body {
             font-family: 'Press Start 2P', -apple-system, sans-serif;
             background: #5c94fc;
             color: #ffffff;
-            height: 100vh;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
             image-rendering: pixelated;
+        }
+        body.portrait-mode {
+            justify-content: center;
+            align-items: center;
+        }
+        body.portrait-mode .game-wrapper {
+            display: none;
+        }
+        body.portrait-mode .rotate-hint {
+            display: flex !important;
+        }
+        .rotate-hint {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+        }
+        .rotate-hint-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            animation: rotate-phone 2s ease-in-out infinite;
+        }
+        @keyframes rotate-phone {
+            0%, 100% { transform: rotate(0deg); }
+            50% { transform: rotate(90deg); }
+        }
+        .rotate-hint-text {
+            font-size: 14px;
+            color: #fcbcb0;
+            text-shadow: 2px 2px 0 #422800;
+        }
+        .game-wrapper {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            width: 100%;
+        }
+        body.landscape-mode .game-wrapper {
+            flex-direction: row;
+        }
+        body.landscape-mode .top-bar {
+            flex-direction: column;
+            padding: 4px 8px;
+            border-bottom: none;
+            border-right: 4px solid #422800;
+            min-width: 80px;
+        }
+        body.landscape-mode .info-bar {
+            flex-direction: column;
+            padding: 4px 8px;
+            border-bottom: none;
+            border-right: 4px solid #422800;
+            min-width: 80px;
+        }
+        body.landscape-mode .game-container {
+            flex: 1;
+            order: 1;
+        }
+        body.landscape-mode .touch-controls {
+            flex-direction: column;
+            order: 2;
+            border-top: none;
+            border-left: 4px solid #422800;
+            min-width: 100px;
+            padding: 8px;
+        }
+        body.landscape-mode .touch-controls .touch-btn {
+            padding: 8px;
+            font-size: 14px;
+        }
+        .gamepad-indicator {
+            position: fixed;
+            top: 8px;
+            right: 40px;
+            background: #00a800;
+            color: #fff;
+            padding: 4px 8px;
+            font-size: 10px;
+            border: 2px solid #00f800;
+            display: none;
+            z-index: 100;
+        }
+        .gamepad-indicator.connected {
+            display: block;
         }
         .top-bar {
             display: flex;
@@ -151,7 +244,7 @@
             padding: 24px;
             border: 6px solid #fcbcb0;
             text-align: center;
-            max-width: 280px;
+            max-width: 320px;
         }
         .message-title {
             font-size: 16px;
@@ -179,42 +272,56 @@
         .pixel-btn:active {
             background: #fc8c48;
         }
+        .controller-hint {
+            font-size: 8px;
+            color: #00a800;
+            margin-top: 8px;
+        }
     </style>
 </head>
-<body>
-    <div class="top-bar">
-        <div class="app-title">像素冒险</div>
-        <button class="close-btn" onclick="closeWindow()">✕</button>
+<body class="portrait-mode">
+    <div class="rotate-hint">
+        <div class="rotate-hint-icon">📱</div>
+        <div class="rotate-hint-text">请横屏游玩<br>获得最佳体验</div>
     </div>
     
-    <div class="info-bar">
-        <div class="info-item">
-            <div class="info-label">分数</div>
-            <div class="info-value" id="score">0</div>
+    <div class="game-wrapper">
+        <div class="top-bar">
+            <div class="app-title">像素冒险</div>
+            <button class="close-btn" onclick="closeWindow()">✕</button>
         </div>
-        <div class="info-item">
-            <div class="info-label">金币</div>
-            <div class="info-value" id="coins">0</div>
+        
+        <div class="info-bar">
+            <div class="info-item">
+                <div class="info-label">分数</div>
+                <div class="info-value" id="score">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">金币</div>
+                <div class="info-value" id="coins">0</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">生命</div>
+                <div class="info-value" id="lives">3</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">关卡</div>
+                <div class="info-value" id="level">1</div>
+            </div>
         </div>
-        <div class="info-item">
-            <div class="info-label">生命</div>
-            <div class="info-value" id="lives">3</div>
+        
+        <div class="game-container">
+            <canvas id="gameCanvas"></canvas>
         </div>
-        <div class="info-item">
-            <div class="info-label">关卡</div>
-            <div class="info-value" id="level">1</div>
+        
+        <div class="touch-controls">
+            <button class="touch-btn" id="leftBtn">◀</button>
+            <button class="touch-btn jump" id="jumpBtn">▲</button>
+            <button class="touch-btn" id="rightBtn">▶</button>
         </div>
     </div>
     
-    <div class="game-container">
-        <canvas id="gameCanvas"></canvas>
-    </div>
-    
-    <div class="touch-controls">
-        <button class="touch-btn" id="leftBtn">◀</button>
-        <button class="touch-btn jump" id="jumpBtn">▲</button>
-        <button class="touch-btn" id="rightBtn">▶</button>
-    </div>
+    <div class="gamepad-indicator" id="gamepadIndicator">🎮 手柄已连接</div>
     
     <div class="message-overlay" id="messageOverlay">
         <div class="message-box">
@@ -222,8 +329,10 @@
             <div class="message-text" id="messageText">
                 收集金币，躲避敌人！<br>
                 方向键/WASD移动<br>
-                空格键跳跃
+                空格键跳跃<br>
+                支持USB手柄
             </div>
+            <div class="controller-hint" id="controllerHint"></div>
             <button class="pixel-btn" onclick="startGame()">开始游戏</button>
         </div>
     </div>
@@ -237,6 +346,21 @@
         const SCALED_TILE = TILE_SIZE * SCALE;
         
         let canvasWidth, canvasHeight, tilesX, tilesY;
+        let isLandscape = false;
+        let gamepadIndex = null;
+        let gamepadConnected = false;
+        
+        function checkOrientation() {
+            const isLandscapeNow = window.innerWidth > window.innerHeight;
+            
+            if (isLandscapeNow !== isLandscape) {
+                isLandscape = isLandscapeNow;
+                document.body.classList.toggle('landscape-mode', isLandscape);
+                document.body.classList.toggle('portrait-mode', !isLandscape);
+                
+                setTimeout(resizeCanvas, 100);
+            }
+        }
         
         function resizeCanvas() {
             const container = document.querySelector('.game-container');
@@ -246,8 +370,8 @@
             tilesX = Math.floor(maxWidth / SCALED_TILE);
             tilesY = Math.floor(maxHeight / SCALED_TILE);
             
-            tilesX = Math.max(10, Math.min(tilesX, 16));
-            tilesY = Math.max(8, Math.min(tilesY, 10));
+            tilesX = Math.max(10, Math.min(tilesX, 20));
+            tilesY = Math.max(6, Math.min(tilesY, 12));
             
             canvasWidth = tilesX * SCALED_TILE;
             canvasHeight = tilesY * SCALED_TILE;
@@ -258,8 +382,73 @@
             canvas.style.height = canvasHeight + 'px';
         }
         
-        resizeCanvas();
-        window.addEventListener('resize', resizeCanvas);
+        checkOrientation();
+        window.addEventListener('resize', checkOrientation);
+        window.addEventListener('orientationchange', () => {
+            setTimeout(checkOrientation, 100);
+        });
+        
+        function handleGamepadConnected(e) {
+            gamepadIndex = e.gamepad.index;
+            gamepadConnected = true;
+            document.getElementById('gamepadIndicator').classList.add('connected');
+            document.getElementById('controllerHint').textContent = '🎮 ' + e.gamepad.id.substring(0, 20) + '...';
+            console.log('Gamepad connected:', e.gamepad.id);
+        }
+        
+        function handleGamepadDisconnected(e) {
+            if (e.gamepad.index === gamepadIndex) {
+                gamepadIndex = null;
+                gamepadConnected = false;
+                document.getElementById('gamepadIndicator').classList.remove('connected');
+                document.getElementById('controllerHint').textContent = '';
+            }
+        }
+        
+        window.addEventListener('gamepadconnected', handleGamepadConnected);
+        window.addEventListener('gamepaddisconnected', handleGamepadDisconnected);
+        
+        function pollGamepad() {
+            if (gamepadIndex === null) return;
+            
+            const gamepads = navigator.getGamepads();
+            const gp = gamepads[gamepadIndex];
+            
+            if (!gp) return;
+            
+            const deadzone = 0.3;
+            
+            if (gp.axes[0] < -deadzone) {
+                keys.left = true;
+                keys.right = false;
+            } else if (gp.axes[0] > deadzone) {
+                keys.left = false;
+                keys.right = true;
+            } else {
+                keys.left = false;
+                keys.right = false;
+            }
+            
+            if (gp.buttons[0] && gp.buttons[0].pressed) {
+                keys.jump = true;
+            } else {
+                keys.jump = false;
+            }
+            
+            if (gp.buttons[14] && gp.buttons[14].pressed) {
+                keys.left = true;
+            }
+            if (gp.buttons[15] && gp.buttons[15].pressed) {
+                keys.right = true;
+            }
+            if (gp.buttons[12] && gp.buttons[12].pressed) {
+                keys.jump = true;
+            }
+            
+            if (gp.buttons[9] && gp.buttons[9].pressed && !gameState.isPlaying) {
+                startGame();
+            }
+        }
         
         const COLORS = {
             sky: '#5c94fc',
@@ -825,6 +1014,8 @@
         function gameLoop() {
             if (!gameState.isPlaying) return;
             
+            pollGamepad();
+            
             ctx.clearRect(0, 0, canvasWidth, canvasHeight);
             
             drawBackground();
@@ -895,7 +1086,22 @@
         jumpBtn.addEventListener('mouseup', () => keys.jump = false);
         jumpBtn.addEventListener('mouseleave', () => keys.jump = false);
         
-        resizeCanvas();
+        function checkExistingGamepads() {
+            const gamepads = navigator.getGamepads();
+            for (let i = 0; i < gamepads.length; i++) {
+                if (gamepads[i]) {
+                    gamepadIndex = i;
+                    gamepadConnected = true;
+                    document.getElementById('gamepadIndicator').classList.add('connected');
+                    document.getElementById('controllerHint').textContent = '🎮 ' + gamepads[i].id.substring(0, 20) + '...';
+                    console.log('Existing gamepad found:', gamepads[i].id);
+                    break;
+                }
+            }
+        }
+        
+        checkExistingGamepads();
+        checkOrientation();
     </script>
 </body>
 </html>
