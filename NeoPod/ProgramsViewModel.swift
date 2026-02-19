@@ -44,26 +44,37 @@ class ProgramsViewModel: ObservableObject {
     
     func confirmUninstall() {
         guard let file = appToUninstall else { return }
-        
+
+        let appId = extractAppId(from: file)
+        guard let appFolderURL = FileSystemManager.programFolderURL()?.appendingPathComponent(appId, isDirectory: true) else {
+            errorMessage = "Failed to get app folder URL"
+            appToUninstall = nil
+            return
+        }
+
         uninstallingAppId = file.id
-        
-        Task {
+
+        Task { [weak self] in
+            guard let self = self else { return }
             do {
-                let appId = extractAppId(from: file)
-                print("Uninstalling app with ID: \(appId)")
-                try await StoreAPI.shared.uninstallApp(appId: appId)
-                
+                if FileManager.default.fileExists(atPath: appFolderURL.path) {
+                    try await self.removeItemOffMainThread(at: appFolderURL)
+                } else {
+                    print("App folder not found for \(appId) at \(appFolderURL.path)")
+                    throw StoreError.installFailed
+                }
+
                 await MainActor.run {
-                    uninstallingAppId = nil
-                    appToUninstall = nil
-                    loadHTMLFiles()
+                    self.uninstallingAppId = nil
+                    self.appToUninstall = nil
+                    self.loadHTMLFiles()
                 }
             } catch {
                 print("Uninstall failed: \(error)")
                 await MainActor.run {
-                    errorMessage = "Failed to uninstall: \(error.localizedDescription)"
-                    uninstallingAppId = nil
-                    appToUninstall = nil
+                    self.errorMessage = "Failed to uninstall: \(error.localizedDescription)"
+                    self.uninstallingAppId = nil
+                    self.appToUninstall = nil
                 }
             }
         }
@@ -74,5 +85,18 @@ class ProgramsViewModel: ObservableObject {
         let appId = pathComponents.first.map(String.init) ?? file.displayName
         print("Extracting appId from '\(file.name)' -> '\(appId)'")
         return appId
+    }
+
+    private func removeItemOffMainThread(at url: URL) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    try FileManager.default.removeItem(at: url)
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 }
