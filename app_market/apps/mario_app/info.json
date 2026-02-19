@@ -1,0 +1,9 @@
+{
+  "name": "像素冒险",
+  "version": "1.0.0",
+  "description": "复古像素风格横版卷轴游戏，收集金币、躲避敌人、闯关冒险！支持键盘和触屏操作",
+  "author": "NeoPod Team",
+  "last_updated": "2026-02-19",
+  "icon": "icon.png",
+  "main_file": "index.html"
+}
