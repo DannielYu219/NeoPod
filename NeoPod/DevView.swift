@@ -17,6 +17,14 @@ struct DevView: View {
             FileSystemManager.ensureAppFoldersExist()
             viewModel.loadHTMLFiles()
         }
+        .alert("Uninstall App", isPresented: $viewModel.showUninstallConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Uninstall", role: .destructive) {
+                viewModel.confirmUninstall()
+            }
+        } message: {
+            Text("Are you sure you want to uninstall \(viewModel.appToUninstall?.displayName ?? "this app")?")
+        }
     }
     
     private var listView: some View {
@@ -63,8 +71,12 @@ struct DevView: View {
                                     file: file,
                                     accent: accent,
                                     containerMidY: containerMidY,
+                                    isUninstalling: viewModel.uninstallingAppId == file.id,
                                     onTap: {
                                         onFileSelected?(file)
+                                    },
+                                    onUninstall: {
+                                        viewModel.requestUninstall(file)
                                     }
                                 )
                             }
@@ -82,54 +94,72 @@ private struct DevRowView: View {
     let file: HTMLFileInfo
     let accent: Color
     let containerMidY: CGFloat
+    let isUninstalling: Bool
     let onTap: () -> Void
+    let onUninstall: () -> Void
     
     var body: some View {
-        Button(action: onTap) {
-            GeometryReader { proxy in
-                let frame = proxy.frame(in: .named("devList"))
-                let distance = abs(frame.midY - containerMidY)
+        GeometryReader { proxy in
+            let frame = proxy.frame(in: .named("devList"))
+            let distance = abs(frame.midY - containerMidY)
+            
+            let scale = max(0.86, 1.08 - (distance / 520))
+            let opacity = max(0.55, 1.0 - (distance / 700))
+            
+            HStack(spacing: 14) {
+                Image(systemName: file.folder == "program" ? "app.fill" : "doc.text.fill")
+                    .font(.system(size: 24, weight: .regular))
+                    .foregroundColor(distance < 30 ? accent : .white.opacity(0.75))
+                    .frame(width: 30, alignment: .leading)
                 
-                let scale = max(0.86, 1.08 - (distance / 520))
-                let opacity = max(0.55, 1.0 - (distance / 700))
-                
-                HStack(spacing: 14) {
-                    Image(systemName: file.folder == "program" ? "app.fill" : "doc.text.fill")
-                        .font(.system(size: 24, weight: .regular))
-                        .foregroundColor(distance < 30 ? accent : .white.opacity(0.75))
-                        .frame(width: 30, alignment: .leading)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(file.displayName)
-                                .font(.system(size: 28, weight: .regular, design: .rounded))
-                                .foregroundColor(distance < 30 ? accent : .white)
-                                .lineLimit(1)
-                            
-                            Text(file.folder)
-                                .font(.system(size: 12, weight: .regular, design: .rounded))
-                                .foregroundColor(.white.opacity(0.5))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Color.white.opacity(0.1))
-                                .cornerRadius(4)
-                        }
-                        
-                        Text(formatDate(file.modificationDate))
-                            .font(.system(size: 14, weight: .regular, design: .rounded))
-                            .foregroundColor(.white.opacity(0.5))
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(file.displayName)
+                            .font(.system(size: 28, weight: .regular, design: .rounded))
+                            .foregroundColor(distance < 30 ? accent : .white)
                             .lineLimit(1)
+                        
+                        Text(file.folder)
+                            .font(.system(size: 12, weight: .regular, design: .rounded))
+                            .foregroundColor(.white.opacity(0.5))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(4)
                     }
-                    Spacer()
+                    
+                    Text(formatDate(file.modificationDate))
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(.white.opacity(0.5))
+                        .lineLimit(1)
                 }
-                .padding(.vertical, 12)
-                .contentShape(Rectangle())
-                .scaleEffect(scale, anchor: .leading)
-                .opacity(opacity)
+                
+                Spacer()
+                
+                if isUninstalling {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .red))
+                        .scaleEffect(0.8)
+                } else if file.folder == "program" {
+                    Button {
+                        onUninstall()
+                    } label: {
+                        Image(systemName: "trash.circle")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .frame(height: 80)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
+            .scaleEffect(scale, anchor: .leading)
+            .opacity(opacity)
+            .onTapGesture {
+                onTap()
+            }
         }
-        .buttonStyle(.plain)
+        .frame(height: 80)
     }
     
     private func formatDate(_ date: Date) -> String {

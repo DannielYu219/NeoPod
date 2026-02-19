@@ -131,8 +131,12 @@ struct StoreView: View {
                                     containerMidY: containerMidY,
                                     isInstalled: viewModel.isAppInstalled(app.id),
                                     isInstalling: viewModel.installingAppId == app.id,
+                                    isUninstalling: viewModel.uninstallingAppId == app.id,
                                     onInstall: {
                                         viewModel.installApp(app)
+                                    },
+                                    onUninstall: {
+                                        viewModel.uninstallApp(app)
                                     }
                                 )
                             }
@@ -152,7 +156,9 @@ private struct StoreRowView: View {
     let containerMidY: CGFloat
     let isInstalled: Bool
     let isInstalling: Bool
+    let isUninstalling: Bool
     let onInstall: () -> Void
+    let onUninstall: () -> Void
     
     var body: some View {
         GeometryReader { proxy in
@@ -188,11 +194,20 @@ private struct StoreRowView: View {
                 
                 Spacer()
                 
-                if isInstalling {
+                if isInstalling || isUninstalling {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: accent))
+                        .progressViewStyle(CircularProgressViewStyle(tint: isUninstalling ? .red : accent))
                         .scaleEffect(0.8)
-                } else if !isInstalled {
+                } else if isInstalled {
+                    Button {
+                        onUninstall()
+                    } label: {
+                        Image(systemName: "trash.circle")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(.red.opacity(0.8))
+                    }
+                    .buttonStyle(.plain)
+                } else {
                     Button {
                         onInstall()
                     } label: {
@@ -218,6 +233,7 @@ class StoreViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage: String?
     @Published var installingAppId: String?
+    @Published var uninstallingAppId: String?
     
     func loadApps() {
         isLoading = true
@@ -254,6 +270,25 @@ class StoreViewModel: ObservableObject {
                 await MainActor.run {
                     errorMessage = "Failed to install \(app.name): \(error.localizedDescription)"
                     installingAppId = nil
+                }
+            }
+        }
+    }
+    
+    func uninstallApp(_ app: AppInfo) {
+        uninstallingAppId = app.id
+        
+        Task {
+            do {
+                try await StoreAPI.shared.uninstallApp(appId: app.id)
+                
+                await MainActor.run {
+                    uninstallingAppId = nil
+                }
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Failed to uninstall \(app.name): \(error.localizedDescription)"
+                    uninstallingAppId = nil
                 }
             }
         }

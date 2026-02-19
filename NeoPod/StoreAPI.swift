@@ -105,6 +105,21 @@ class StoreAPI {
             }
         }
     }
+    
+    func uninstallApp(appId: String) async throws {
+        guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            throw StoreError.installFailed
+        }
+        
+        let programURL = documentsURL.appendingPathComponent("program", isDirectory: true)
+        let appURL = programURL.appendingPathComponent(appId, isDirectory: true)
+        
+        guard FileManager.default.fileExists(atPath: appURL.path) else {
+            throw StoreError.installFailed
+        }
+        
+        try FileManager.default.removeItem(at: appURL)
+    }
 }
 
 enum StoreError: LocalizedError {
