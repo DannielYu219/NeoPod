@@ -8,6 +8,7 @@ class ProgramsViewModel: ObservableObject {
     @Published var selectedFile: HTMLFileInfo?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var showErrorAlert = false
     @Published var showUninstallConfirm = false
     @Published var appToUninstall: HTMLFileInfo?
     @Published var uninstallingAppId: String?
@@ -37,31 +38,51 @@ class ProgramsViewModel: ObservableObject {
     }
     
     func requestUninstall(_ file: HTMLFileInfo) {
-        guard file.folder == "program" else { return }
+        print("[ProgramsViewModel] requestUninstall called for: \(file.displayName), folder: \(file.folder)")
+        guard file.folder == "program" else {
+            print("[ProgramsViewModel] Cannot uninstall - not a program folder")
+            return
+        }
         appToUninstall = file
         showUninstallConfirm = true
+        print("[ProgramsViewModel] Showing uninstall confirmation dialog")
     }
     
     func confirmUninstall() {
-        guard let file = appToUninstall else { return }
+        guard let file = appToUninstall else {
+            print("[ProgramsViewModel] confirmUninstall: no appToUninstall")
+            showError("No app selected for uninstall")
+            return
+        }
 
         let appId = extractAppId(from: file)
+        print("[ProgramsViewModel] confirmUninstall: appId=\(appId), file.id=\(file.id)")
         uninstallingAppId = file.id
+        showUninstallConfirm = false
 
         Task { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                print("[ProgramsViewModel] Task: self is nil")
+                return
+            }
+            
+            print("[ProgramsViewModel] Task: Starting uninstall for appId: \(appId)")
+            
             do {
                 try await StoreAPI.shared.uninstallApp(appId: appId)
+                print("[ProgramsViewModel] Task: Uninstall succeeded")
 
                 await MainActor.run {
                     self.uninstallingAppId = nil
                     self.appToUninstall = nil
                     self.loadHTMLFiles()
+                    print("[ProgramsViewModel] Task: UI updated after successful uninstall")
                 }
             } catch {
-                print("Uninstall failed: \(error)")
+                print("[ProgramsViewModel] Task: Uninstall failed with error: \(error)")
+                let errorMsg = "Failed to uninstall \(appId): \(error.localizedDescription)"
                 await MainActor.run {
-                    self.errorMessage = "Failed to uninstall: \(error.localizedDescription)"
+                    self.showError(errorMsg)
                     self.uninstallingAppId = nil
                     self.appToUninstall = nil
                 }
@@ -72,7 +93,13 @@ class ProgramsViewModel: ObservableObject {
     private func extractAppId(from file: HTMLFileInfo) -> String {
         let pathComponents = file.name.split(separator: "/")
         let appId = pathComponents.first.map(String.init) ?? file.displayName
-        print("Extracting appId from '\(file.name)' -> '\(appId)'")
+        print("[ProgramsViewModel] extractAppId: '\(file.name)' -> '\(appId)'")
         return appId
+    }
+    
+    private func showError(_ message: String) {
+        print("[ProgramsViewModel] showError: \(message)")
+        errorMessage = message
+        showErrorAlert = true
     }
 }

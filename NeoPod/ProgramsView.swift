@@ -18,12 +18,21 @@ struct ProgramsView: View {
             viewModel.loadHTMLFiles()
         }
         .alert("Uninstall App", isPresented: $viewModel.showUninstallConfirm) {
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) {
+                viewModel.appToUninstall = nil
+            }
             Button("Uninstall", role: .destructive) {
                 viewModel.confirmUninstall()
             }
         } message: {
             Text("Are you sure you want to uninstall \(viewModel.appToUninstall?.displayName ?? "this app")?")
+        }
+        .alert("Error", isPresented: $viewModel.showErrorAlert) {
+            Button("OK", role: .cancel) {
+                viewModel.errorMessage = nil
+            }
+        } message: {
+            Text(viewModel.errorMessage ?? "Unknown error")
         }
     }
     
