@@ -24,7 +24,6 @@ struct ContentView: View {
         case home
         case music
         case video
-        case chat
         case store
         case setting
         case programs
@@ -40,7 +39,6 @@ struct ContentView: View {
     private let listitem = [
         MenuItem(title: "music", iconName: "music.note", destination: .music),
         MenuItem(title: "video", iconName: "play.rectangle", destination: .video),
-        MenuItem(title: "chat", iconName: "message", destination: .chat),
         MenuItem(title: "store", iconName: "app.badge", destination: .store),
         MenuItem(title: "setting", iconName: "gearshape", destination: .setting),
         MenuItem(title: "programs", iconName: "terminal", destination: .programs)
@@ -50,6 +48,7 @@ struct ContentView: View {
     @State private var currentPage: MenuDestination = .home
     @State private var isForwardNavigation = true
     @State private var musicIsShowingPlayer = false
+    @State private var videoIsShowingPlayer = false
     
     // Dev 页面专属状态
     @State private var devSelectedFile: HTMLFileInfo? = nil
@@ -76,6 +75,13 @@ struct ContentView: View {
                                 if currentPage == .music, musicIsShowingPlayer {
                                     withAnimation(.easeOut(duration: 0.28)) {
                                         musicIsShowingPlayer = false
+                                    }
+                                    return
+                                }
+                                
+                                if currentPage == .video, videoIsShowingPlayer {
+                                    withAnimation(.easeOut(duration: 0.28)) {
+                                        videoIsShowingPlayer = false
                                     }
                                     return
                                 }
@@ -178,9 +184,7 @@ struct ContentView: View {
         case .music:
             MusicView(isShowingPlayer: $musicIsShowingPlayer)
         case .video:
-            VideoView()
-        case .chat:
-            ChatView()
+            VideoView(isShowingPlayer: $videoIsShowingPlayer)
         case .store:
             StoreView()
         case .setting:
@@ -202,8 +206,6 @@ struct ContentView: View {
             return "MUSIC"
         case .video:
             return "VIDEO"
-        case .chat:
-            return "CHAT"
         case .store:
             return "STORE"
         case .setting:

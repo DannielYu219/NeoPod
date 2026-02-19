@@ -1,4 +1,10 @@
 // FileSystemManager.swift
+// 作用：管理应用的文件系统，提供文件夹路径和文件操作功能
+// 依赖：Foundation
+// 输入：无
+// 输出：各文件夹URL、HTML文件列表
+// 实现：使用FileManager管理Documents目录下的子文件夹，支持music/video/config/cache/program/dev目录
+
 import Foundation
 
 enum FileSystemManager {
@@ -31,6 +37,10 @@ enum FileSystemManager {
 
     static func musicFolderURL() -> URL? {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("music", isDirectory: true)
+    }
+    
+    static func videoFolderURL() -> URL? {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.appendingPathComponent("video", isDirectory: true)
     }
     
     static func devFolderURL() -> URL? {
