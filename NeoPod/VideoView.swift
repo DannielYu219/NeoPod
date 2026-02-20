@@ -8,7 +8,7 @@
 import SwiftUI
 import AVFoundation
 import MediaPlayer
-import Combine
+internal import Combine
 
 enum VideoSource {
     case local
@@ -235,14 +235,17 @@ class VideoPlayerModel: NSObject, ObservableObject {
                     await MainActor.run { self.duration = seconds }
                 }
                 
-                let naturalSize = try await asset.load(.naturalSize)
-                let transform = try await asset.load(.preferredTransform)
-                let videoSize = naturalSize.applying(transform)
-                
-                await MainActor.run {
-                    self.videoSize = CGSize(width: abs(videoSize.width), height: abs(videoSize.height))
-                    self.isLandscape = self.videoSize.width >= self.videoSize.height
-                    self.updateDeviceOrientation()
+                let tracks = try await asset.load(.tracks)
+                if let videoTrack = tracks.first(where: { $0.mediaType == .video }) {
+                    let naturalSize = try await videoTrack.load(.naturalSize)
+                    let transform = try await videoTrack.load(.preferredTransform)
+                    let videoSize = naturalSize.applying(transform)
+                    
+                    await MainActor.run {
+                        self.videoSize = CGSize(width: abs(videoSize.width), height: abs(videoSize.height))
+                        self.isLandscape = self.videoSize.width >= self.videoSize.height
+                        self.updateDeviceOrientation()
+                    }
                 }
             } catch {}
         }
@@ -255,7 +258,7 @@ class VideoPlayerModel: NSObject, ObservableObject {
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
             let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientationMask)
             windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                if let error = error {
+                if let error = error as? NSError {
                     print("Failed to update orientation: \(error)")
                 }
             }
