@@ -62,7 +62,7 @@ class SMBClient: ObservableObject {
             persistence: .forSession
         )
         
-        guard let smbClient = SMB2Manager(url: url, credential: credential, domain: config.domain.isEmpty ? "WORKGROUP" : config.domain) else {
+        guard let smbClient = SMB2Manager(url: url, domain: config.domain.isEmpty ? "WORKGROUP" : config.domain, credential: credential) else {
             throw SMBClientError.connectionFailed("Failed to create SMB client")
         }
         
@@ -138,7 +138,7 @@ class SMBClient: ObservableObject {
         }
         
         var data = Data()
-        for try await byte in client.contents(atPath: path) {
+        for try await byte in try await client.contents(atPath: path) {
             data.append(byte)
         }
         return data
@@ -153,7 +153,7 @@ class SMBClient: ObservableObject {
         var bytesRead: Int64 = 0
         var skipped: Int64 = 0
         
-        for try await byte in client.contents(atPath: path) {
+        for try await byte in try await client.contents(atPath: path) {
             if skipped < offset {
                 skipped += 1
                 continue
@@ -216,7 +216,7 @@ class SMBClient: ObservableObject {
             }
         }
         
-        try await client.downloadItem(atPath: path, to: localURL, progress: progressHandler)
+        try await client.downloadItem(atPath: path, to: localURL, progress: progressHandler as! (Int64, Int64) -> Bool)
     }
     
     func getStreamingURL(for path: String) -> URL? {
