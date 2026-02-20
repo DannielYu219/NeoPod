@@ -2,8 +2,8 @@
 // 作用：视频播放视图，支持本地视频和SMB网络视频播放
 // 依赖：SwiftUI, AVFoundation, SMBClient, SMBSettings, FileSystemManager
 // 输入：用户选择视频源（本地/SMB）
-// 输出：视频列表、视频播放界面
-// 实现：使用AVPlayer播放视频，支持本地文件和SMB网络流，包含视频列表、播放器和SMB设置界面
+// 输出：视频列表、全屏视频播放界面
+// 实现：使用AVPlayer播放视频，支持本地文件和SMB网络流，全屏显示视频画面，根据视频分辨率自动设置横竖屏
 
 import SwiftUI
 import AVFoundation
@@ -150,11 +150,16 @@ class VideoPlayerModel: NSObject, ObservableObject {
     @Published var duration: Double = 1
     @Published var currentItem: VideoDisplayItem?
     @Published var isBuffering = false
+    @Published var videoSize: CGSize = .zero
+    @Published var isLandscape: Bool = true
+    @Published var showControls: Bool = true
     
     var player: AVPlayer?
+    var playerLayer: AVPlayerLayer?
     private var playerItem: AVPlayerItem?
     private var timeObserver: Any?
     private var cancellables = Set<AnyCancellable>()
+    private var controlsHideTask: Task<Void, Never>?
     
     override init() {
         super.init()
@@ -198,13 +203,16 @@ class VideoPlayerModel: NSObject, ObservableObject {
     
     private func setupPlayer(url: URL, item: VideoDisplayItem) {
         if let observer = timeObserver { player?.removeTimeObserver(observer); timeObserver = nil }
+        playerLayer?.removeFromSuperlayer()
         
         let asset = AVURLAsset(url: url)
         playerItem = AVPlayerItem(asset: asset)
         player = AVPlayer(playerItem: playerItem)
+        playerLayer = AVPlayerLayer(player: player)
         currentItem = item
         isPlaying = true
         progress = 0
+        showControls = true
         player?.play()
         
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
@@ -226,14 +234,88 @@ class VideoPlayerModel: NSObject, ObservableObject {
                 if !seconds.isNaN && !seconds.isInfinite && seconds > 0 {
                     await MainActor.run { self.duration = seconds }
                 }
+                
+                let naturalSize = try await asset.load(.naturalSize)
+                let transform = try await asset.load(.preferredTransform)
+                let videoSize = naturalSize.applying(transform)
+                
+                await MainActor.run {
+                    self.videoSize = CGSize(width: abs(videoSize.width), height: abs(videoSize.height))
+                    self.isLandscape = self.videoSize.width >= self.videoSize.height
+                    self.updateDeviceOrientation()
+                }
             } catch {}
+        }
+        
+        scheduleControlsHide()
+    }
+    
+    private func updateDeviceOrientation() {
+        let orientationMask: UIInterfaceOrientationMask = isLandscape ? .landscape : .portrait
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientationMask)
+            windowScene.requestGeometryUpdate(geometryPreferences) { error in
+                if let error = error {
+                    print("Failed to update orientation: \(error)")
+                }
+            }
         }
     }
     
-    func togglePlayPause() { if isPlaying { pause() } else { play() } }
-    func play() { player?.play(); isPlaying = true }
-    func pause() { player?.pause(); isPlaying = false }
-    func stop() { player?.pause(); player?.seek(to: .zero); progress = 0; isPlaying = false }
+    func resetOrientation() {
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
+            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .all)
+            windowScene.requestGeometryUpdate(geometryPreferences) { _ in }
+        }
+    }
+    
+    func toggleControls() {
+        showControls.toggle()
+        if showControls {
+            scheduleControlsHide()
+        } else {
+            controlsHideTask?.cancel()
+        }
+    }
+    
+    func scheduleControlsHide() {
+        controlsHideTask?.cancel()
+        controlsHideTask = Task {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if !Task.isCancelled {
+                await MainActor.run {
+                    if self.isPlaying {
+                        self.showControls = false
+                    }
+                }
+            }
+        }
+    }
+    
+    func togglePlayPause() { 
+        if isPlaying { pause() } else { play() }
+    }
+    
+    func play() { 
+        player?.play()
+        isPlaying = true
+        scheduleControlsHide()
+    }
+    
+    func pause() { 
+        player?.pause()
+        isPlaying = false
+        showControls = true
+        controlsHideTask?.cancel()
+    }
+    
+    func stop() { 
+        player?.pause()
+        player?.seek(to: .zero)
+        progress = 0
+        isPlaying = false
+        resetOrientation()
+    }
     
     func seek(to time: TimeInterval) {
         let cmTime = CMTime(seconds: time, preferredTimescale: 600)
@@ -277,8 +359,13 @@ struct VideoView: View {
             
             Group {
                 if isShowingPlayer, let current = playerModel.currentItem {
-                    videoPlayerView(for: current)
-                        .transition(.move(edge: .trailing))
+                    FullScreenVideoPlayer(item: current, accent: accent, onClose: {
+                        playerModel.stop()
+                        withAnimation(.easeOut(duration: 0.28)) {
+                            isShowingPlayer = false
+                        }
+                    })
+                    .transition(.opacity)
                 } else {
                     videoListView
                         .transition(.move(edge: .leading))
@@ -474,75 +561,154 @@ struct VideoView: View {
             }
         }
     }
+}
+
+struct FullScreenVideoPlayer: View {
+    let item: VideoDisplayItem
+    let accent: Color
+    let onClose: () -> Void
     
-    private func videoPlayerView(for item: VideoDisplayItem) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Spacer()
-                Text("NOW PLAYING")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundColor(.white.opacity(0.5))
-                    .tracking(1)
-                Spacer()
-            }
-            .padding(.top, 8)
-            
-            Spacer()
-            
-            VStack(spacing: 8) {
-                Text(item.title)
-                    .font(.system(size: 28, weight: .regular, design: .rounded))
-                    .foregroundColor(.white)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.center)
-            }
-            
-            Spacer()
-            
-            VStack(spacing: 6) {
-                Slider(value: Binding(get: { playerModel.progress }, set: { playerModel.seek(to: $0) }), in: 0...max(playerModel.duration, 1))
-                    .accentColor(accent)
+    @ObservedObject private var playerModel = VideoPlayerModel.shared
+    @State private var isDragging = false
+    
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.ignoresSafeArea()
                 
-                HStack {
-                    Text(timeString(from: playerModel.progress))
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.5))
-                        .monospacedDigit()
-                    Spacer()
-                    Text("-\(timeString(from: max(0, playerModel.duration - playerModel.progress)))")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(.white.opacity(0.5))
-                        .monospacedDigit()
+                VideoPlayerLayerView(playerLayer: playerModel.playerLayer)
+                    .aspectRatio(playerModel.videoSize.width > 0 ? playerModel.videoSize : CGSize(width: 16, height: 9), contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                
+                if playerModel.showControls {
+                    controlsOverlay(geometry: geometry)
+                        .transition(.opacity)
                 }
             }
-            .padding(.bottom, 20)
-            
-            HStack(spacing: 40) {
-                Button { playerModel.seekBackward(15) } label: {
-                    Image(systemName: "gobackward.15")
-                        .font(.system(size: 24, weight: .regular))
-                        .foregroundColor(.white)
-                }.buttonStyle(.plain)
-                
-                Button { playerModel.togglePlayPause() } label: {
-                    ZStack {
-                        Circle().fill(accent).frame(width: 64, height: 64)
-                        Image(systemName: playerModel.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: 24, weight: .regular))
-                            .foregroundColor(.black)
-                            .offset(x: playerModel.isPlaying ? 0 : 2)
-                    }
-                }.buttonStyle(.plain)
-                
-                Button { playerModel.seekForward(15) } label: {
-                    Image(systemName: "goforward.15")
-                        .font(.system(size: 24, weight: .regular))
-                        .foregroundColor(.white)
-                }.buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                playerModel.toggleControls()
             }
-            .padding(.bottom, 80)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in isDragging = true }
+                    .onEnded { _ in isDragging = false }
+            )
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ignoresSafeArea(.all)
+        .statusBar(hidden: true)
+    }
+    
+    @ViewBuilder
+    private func controlsOverlay(geometry: GeometryProxy) -> some View {
+        VStack(spacing: 0) {
+            topBar
+            Spacer()
+            bottomControls(geometry: geometry)
+        }
+        .background(
+            LinearGradient(
+                gradient: Gradient(colors: [.black.opacity(0.7), .clear, .clear, .black.opacity(0.7)]),
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+    }
+    
+    private var topBar: some View {
+        HStack {
+            Button {
+                onClose()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(12)
+            }
+            .buttonStyle(.plain)
+            
+            Spacer()
+            
+            Text(item.title)
+                .font(.system(size: 18, weight: .medium, design: .rounded))
+                .foregroundColor(.white)
+                .lineLimit(1)
+            
+            Spacer()
+            
+            Color.clear.frame(width: 48)
+        }
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+    }
+    
+    private func bottomControls(geometry: GeometryProxy) -> some View {
+        VStack(spacing: 12) {
+            progressSlider
+            
+            HStack(spacing: 50) {
+                Button {
+                    playerModel.seekBackward(15)
+                } label: {
+                    Image(systemName: "gobackward.15")
+                        .font(.system(size: 28, weight: .regular))
+                        .foregroundColor(.white)
+                }
+                .buttonStyle(.plain)
+                
+                Button {
+                    playerModel.togglePlayPause()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(accent)
+                            .frame(width: 72, height: 72)
+                        Image(systemName: playerModel.isPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 28, weight: .regular))
+                            .foregroundColor(.black)
+                            .offset(x: playerModel.isPlaying ? 0 : 3)
+                    }
+                }
+                .buttonStyle(.plain)
+                
+                Button {
+                    playerModel.seekForward(15)
+                } label: {
+                    Image(systemName: "goforward.15")
+                        .font(.system(size: 28, weight: .regular))
+                        .foregroundColor(.white)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? geometry.safeAreaInsets.bottom : 20)
+        }
+        .padding(.horizontal, 24)
+    }
+    
+    private var progressSlider: some View {
+        VStack(spacing: 8) {
+            Slider(value: Binding(
+                get: { playerModel.progress },
+                set: { playerModel.seek(to: $0) }
+            ), in: 0...max(playerModel.duration, 1))
+            .accentColor(accent)
+            .tint(.white.opacity(0.3))
+            
+            HStack {
+                Text(timeString(from: playerModel.progress))
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.7))
+                    .monospacedDigit()
+                
+                Spacer()
+                
+                Text("-\(timeString(from: max(0, playerModel.duration - playerModel.progress)))")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.7))
+                    .monospacedDigit()
+            }
+        }
     }
     
     private func timeString(from value: Double) -> String {
@@ -555,6 +721,25 @@ struct VideoView: View {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         }
         return String(format: "%d:%02d", minutes, seconds)
+    }
+}
+
+struct VideoPlayerLayerView: UIViewRepresentable {
+    let playerLayer: AVPlayerLayer?
+    
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView()
+        view.backgroundColor = .black
+        return view
+    }
+    
+    func updateUIView(_ uiView: UIView, context: Context) {
+        if let playerLayer = playerLayer {
+            playerLayer.frame = uiView.bounds
+            if playerLayer.superlayer == nil {
+                uiView.layer.addSublayer(playerLayer)
+            }
+        }
     }
 }
 
