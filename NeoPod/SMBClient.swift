@@ -137,7 +137,11 @@ class SMBClient: ObservableObject {
             throw SMBClientError.notConnected
         }
         
-        return try await client.contents(atPath: path)
+        var data = Data()
+        for try await byte in client.contents(atPath: path) {
+            data.append(byte)
+        }
+        return data
     }
     
     func streamFile(at path: String, offset: Int64 = 0, length: Int? = nil) async throws -> Data {
@@ -145,11 +149,24 @@ class SMBClient: ObservableObject {
             throw SMBClientError.notConnected
         }
         
-        if let length = length {
-            return try await client.contents(atPath: path, offset: UInt64(offset), length: length)
-        } else {
-            return try await client.contents(atPath: path, offset: UInt64(offset))
+        var data = Data()
+        var bytesRead: Int64 = 0
+        var skipped: Int64 = 0
+        
+        for try await byte in client.contents(atPath: path) {
+            if skipped < offset {
+                skipped += 1
+                continue
+            }
+            
+            if let length = length, bytesRead >= length {
+                break
+            }
+            
+            data.append(byte)
+            bytesRead += 1
         }
+        return data
     }
     
     func fileExists(at path: String) async throws -> Bool {
@@ -191,7 +208,15 @@ class SMBClient: ObservableObject {
             throw SMBClientError.notConnected
         }
         
-        try await client.downloadItem(atPath: path, to: localURL, progress: progress)
+        let progressHandler: SMB2Manager.ReadProgressHandler? = progress.map { progressCallback in
+            return { (read: Int64, total: Int64) -> Bool in
+                let percentage = total > 0 ? Double(read) / Double(total) : 0
+                progressCallback(percentage)
+                return true
+            }
+        }
+        
+        try await client.downloadItem(atPath: path, to: localURL, progress: progressHandler)
     }
     
     func getStreamingURL(for path: String) -> URL? {
