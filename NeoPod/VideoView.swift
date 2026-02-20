@@ -3,12 +3,13 @@
 // 依赖：SwiftUI, AVFoundation, SMBClient, SMBSettings, FileSystemManager
 // 输入：用户选择视频源（本地/SMB）
 // 输出：视频列表、全屏视频播放界面
-// 实现：使用AVPlayer播放视频，支持本地文件和SMB网络流，全屏显示视频画面，根据视频分辨率自动设置横竖屏
+// 实现：使用AVPlayerViewController播放视频，支持本地文件和SMB网络流，全屏显示视频画面，根据视频分辨率自动设置横竖屏
 
 import SwiftUI
 import AVFoundation
 import MediaPlayer
-internal import Combine
+import Combine
+import AVKit
 
 enum VideoSource {
     case local
@@ -153,9 +154,9 @@ class VideoPlayerModel: NSObject, ObservableObject {
     @Published var videoSize: CGSize = .zero
     @Published var isLandscape: Bool = true
     @Published var showControls: Bool = true
+    @Published var playerController: AVPlayerViewController?
     
     var player: AVPlayer?
-    var playerLayer: AVPlayerLayer?
     private var playerItem: AVPlayerItem?
     private var timeObserver: Any?
     private var cancellables = Set<AnyCancellable>()
@@ -203,16 +204,21 @@ class VideoPlayerModel: NSObject, ObservableObject {
     
     private func setupPlayer(url: URL, item: VideoDisplayItem) {
         if let observer = timeObserver { player?.removeTimeObserver(observer); timeObserver = nil }
-        playerLayer?.removeFromSuperlayer()
         
         let asset = AVURLAsset(url: url)
         playerItem = AVPlayerItem(asset: asset)
         player = AVPlayer(playerItem: playerItem)
-        playerLayer = AVPlayerLayer(player: player)
         currentItem = item
         isPlaying = true
         progress = 0
         showControls = true
+        
+        let controller = AVPlayerViewController()
+        controller.player = player
+        controller.showsPlaybackControls = false
+        controller.videoGravity = .resizeAspect
+        playerController = controller
+        
         player?.play()
         
         let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
@@ -317,6 +323,7 @@ class VideoPlayerModel: NSObject, ObservableObject {
         player?.seek(to: .zero)
         progress = 0
         isPlaying = false
+        playerController = nil
         resetOrientation()
     }
     
@@ -572,43 +579,35 @@ struct FullScreenVideoPlayer: View {
     let onClose: () -> Void
     
     @ObservedObject private var playerModel = VideoPlayerModel.shared
-    @State private var isDragging = false
     
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                Color.black.ignoresSafeArea()
-                
-                VideoPlayerLayerView(playerLayer: playerModel.playerLayer)
-                    .aspectRatio(playerModel.videoSize.width > 0 ? playerModel.videoSize : CGSize(width: 16, height: 9), contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                
-                if playerModel.showControls {
-                    controlsOverlay(geometry: geometry)
-                        .transition(.opacity)
-                }
+        ZStack {
+            Color.black.ignoresSafeArea()
+            
+            if let controller = playerModel.playerController {
+                VideoPlayerViewControllerRepresentable(controller: controller)
+                    .ignoresSafeArea(.all)
             }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                playerModel.toggleControls()
+            
+            if playerModel.showControls {
+                controlsOverlay
+                    .transition(.opacity)
             }
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in isDragging = true }
-                    .onEnded { _ in isDragging = false }
-            )
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            playerModel.toggleControls()
         }
         .ignoresSafeArea(.all)
         .statusBar(hidden: true)
     }
     
     @ViewBuilder
-    private func controlsOverlay(geometry: GeometryProxy) -> some View {
+    private var controlsOverlay: some View {
         VStack(spacing: 0) {
             topBar
             Spacer()
-            bottomControls(geometry: geometry)
+            bottomControls
         }
         .background(
             LinearGradient(
@@ -646,47 +645,49 @@ struct FullScreenVideoPlayer: View {
         .padding(.top, 8)
     }
     
-    private func bottomControls(geometry: GeometryProxy) -> some View {
-        VStack(spacing: 12) {
-            progressSlider
-            
-            HStack(spacing: 50) {
-                Button {
-                    playerModel.seekBackward(15)
-                } label: {
-                    Image(systemName: "gobackward.15")
-                        .font(.system(size: 28, weight: .regular))
-                        .foregroundColor(.white)
-                }
-                .buttonStyle(.plain)
+    private var bottomControls: some View {
+        GeometryReader { geometry in
+            VStack(spacing: 12) {
+                progressSlider
                 
-                Button {
-                    playerModel.togglePlayPause()
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(accent)
-                            .frame(width: 72, height: 72)
-                        Image(systemName: playerModel.isPlaying ? "pause.fill" : "play.fill")
+                HStack(spacing: 50) {
+                    Button {
+                        playerModel.seekBackward(15)
+                    } label: {
+                        Image(systemName: "gobackward.15")
                             .font(.system(size: 28, weight: .regular))
-                            .foregroundColor(.black)
-                            .offset(x: playerModel.isPlaying ? 0 : 3)
+                            .foregroundColor(.white)
                     }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        playerModel.togglePlayPause()
+                    } label: {
+                        ZStack {
+                            Circle()
+                                .fill(accent)
+                                .frame(width: 72, height: 72)
+                            Image(systemName: playerModel.isPlaying ? "pause.fill" : "play.fill")
+                                .font(.system(size: 28, weight: .regular))
+                                .foregroundColor(.black)
+                                .offset(x: playerModel.isPlaying ? 0 : 3)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    
+                    Button {
+                        playerModel.seekForward(15)
+                    } label: {
+                        Image(systemName: "goforward.15")
+                            .font(.system(size: 28, weight: .regular))
+                            .foregroundColor(.white)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                
-                Button {
-                    playerModel.seekForward(15)
-                } label: {
-                    Image(systemName: "goforward.15")
-                        .font(.system(size: 28, weight: .regular))
-                        .foregroundColor(.white)
-                }
-                .buttonStyle(.plain)
+                .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? geometry.safeAreaInsets.bottom : 20)
             }
-            .padding(.bottom, geometry.safeAreaInsets.bottom > 0 ? geometry.safeAreaInsets.bottom : 20)
+            .padding(.horizontal, 24)
         }
-        .padding(.horizontal, 24)
     }
     
     private var progressSlider: some View {
@@ -727,22 +728,14 @@ struct FullScreenVideoPlayer: View {
     }
 }
 
-struct VideoPlayerLayerView: UIViewRepresentable {
-    let playerLayer: AVPlayerLayer?
+struct VideoPlayerViewControllerRepresentable: UIViewControllerRepresentable {
+    let controller: AVPlayerViewController
     
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        view.backgroundColor = .black
-        return view
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        return controller
     }
     
-    func updateUIView(_ uiView: UIView, context: Context) {
-        if let playerLayer = playerLayer {
-            playerLayer.frame = uiView.bounds
-            if playerLayer.superlayer == nil {
-                uiView.layer.addSublayer(playerLayer)
-            }
-        }
+    func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
     }
 }
 
