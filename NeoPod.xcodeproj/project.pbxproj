@@ -6,6 +6,25 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		2FFED2072F486D7400B63685 /* AMSMB2 in Frameworks */ = {isa = PBXBuildFile; productRef = 2FAMSMB2000000001 /* AMSMB2 */; };
+		2FFED2412F48901100B63685 /* AMSMB2 in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 2FAMSMB2000000001 /* AMSMB2 */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		2FFED2422F48901100B63685 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				2FFED2412F48901100B63685 /* AMSMB2 in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
 		2F36998B2F4466DC00B0BE4D /* NeoPod.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = NeoPod.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -38,6 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2FFED2072F486D7400B63685 /* AMSMB2 in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -62,6 +82,7 @@
 				2FCDE7FC2F40812E005B322D /* Sources */,
 				2FCDE7FD2F40812E005B322D /* Frameworks */,
 				2FCDE7FE2F40812E005B322D /* Resources */,
+				2FFED2422F48901100B63685 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -103,7 +124,7 @@
 			mainGroup = 2FCDE7F72F40812D005B322D;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				2FAMSMB2000000000 /* XCRemoteSwiftPackageReference "amsmb2" */,
+				2FAMSMB2000000000 /* XCRemoteSwiftPackageReference "AMSMB2" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2FCDE7F72F40812D005B322D;
@@ -357,7 +378,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		2FAMSMB2000000000 /* XCRemoteSwiftPackageReference "amsmb2" */ = {
+		2FAMSMB2000000000 /* XCRemoteSwiftPackageReference "AMSMB2" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/amosavian/AMSMB2";
 			requirement = {
@@ -370,7 +391,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		2FAMSMB2000000001 /* AMSMB2 */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 2FAMSMB2000000000 /* XCRemoteSwiftPackageReference "amsmb2" */;
+			package = 2FAMSMB2000000000 /* XCRemoteSwiftPackageReference "AMSMB2" */;
 			productName = AMSMB2;
 		};
 /* End XCSwiftPackageProductDependency section */

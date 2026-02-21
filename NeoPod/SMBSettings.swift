@@ -6,6 +6,8 @@
 // 实现：使用UserDefaults持久化存储SMB服务器配置，支持多个服务器配置
 
 import Foundation
+internal import Combine
+import SwiftUI
 
 struct SMBServerConfig: Codable, Identifiable, Equatable {
     var id = UUID()

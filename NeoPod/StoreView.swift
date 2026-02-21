@@ -1,4 +1,5 @@
 import SwiftUI
+internal import Combine
 
 struct StoreView: View {
     @StateObject private var viewModel = StoreViewModel()
@@ -20,7 +21,6 @@ struct StoreView: View {
                     appListView
                 }
             }
-            .navigationTitle("Store")
             .navigationBarTitleDisplayMode(.inline)
         }
         .task {
@@ -36,11 +36,11 @@ struct StoreView: View {
                 .font(.system(size: 48))
                 .foregroundColor(.white.opacity(0.5))
 
-            Text("Store Not Configured")
+            Text("Not Configured")
                 .font(.system(size: 24, weight: .medium, design: .rounded))
                 .foregroundColor(.white)
 
-            Text("Please configure the store server address in Settings")
+            Text("Please configure the server address in Settings")
                 .font(.system(size: 16, design: .rounded))
                 .foregroundColor(.white.opacity(0.6))
                 .multilineTextAlignment(.center)
@@ -100,27 +100,21 @@ struct StoreView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("STORE")
-                            .font(.system(size: 34, weight: .black))
-                            .foregroundColor(.white)
+                    HStack {
+                        Text("\(viewModel.apps.count) apps available")
+                            .font(.system(size: 14, design: .rounded))
+                            .foregroundColor(.white.opacity(0.6))
 
-                        HStack {
-                            Text("\(viewModel.apps.count) apps available")
-                                .font(.system(size: 14, design: .rounded))
-                                .foregroundColor(.white.opacity(0.6))
+                        Spacer()
 
-                            Spacer()
-
-                            Button {
-                                viewModel.loadApps()
-                            } label: {
-                                Image(systemName: "arrow.clockwise")
-                                    .font(.system(size: 16, weight: .medium))
-                                    .foregroundColor(accent)
-                            }
-                            .buttonStyle(.plain)
+                        Button {
+                            viewModel.loadApps()
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(accent)
                         }
+                        .buttonStyle(.plain)
                     }
 
                     if viewModel.apps.isEmpty {

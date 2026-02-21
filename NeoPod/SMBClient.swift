@@ -7,6 +7,7 @@
 
 import Foundation
 import AMSMB2
+internal import Combine
 
 struct SMBFileItem: Identifiable, Equatable {
     let id = UUID()
