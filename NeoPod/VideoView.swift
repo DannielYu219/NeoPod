@@ -8,7 +8,7 @@
 import SwiftUI
 import AVFoundation
 import MediaPlayer
-import Combine
+internal import Combine
 import AVKit
 
 enum VideoSource {
@@ -152,15 +152,16 @@ class VideoPlayerModel: NSObject, ObservableObject {
     @Published var currentItem: VideoDisplayItem?
     @Published var isBuffering = false
     @Published var videoSize: CGSize = .zero
-    @Published var isLandscape: Bool = true
     @Published var showControls: Bool = true
-    @Published var playerController: AVPlayerViewController?
     
+    var playerController: AVPlayerViewController?
     var player: AVPlayer?
     private var playerItem: AVPlayerItem?
     private var timeObserver: Any?
     private var cancellables = Set<AnyCancellable>()
     private var controlsHideTask: Task<Void, Never>?
+    private var orientationUpdateTask: Task<Void, Never>?
+    private(set) var isLandscape: Bool = true
     
     override init() {
         super.init()
@@ -250,13 +251,26 @@ class VideoPlayerModel: NSObject, ObservableObject {
                     await MainActor.run {
                         self.videoSize = CGSize(width: abs(videoSize.width), height: abs(videoSize.height))
                         self.isLandscape = self.videoSize.width >= self.videoSize.height
-                        self.updateDeviceOrientation()
                     }
+                    
+                    self.scheduleOrientationUpdate()
                 }
             } catch {}
         }
         
         scheduleControlsHide()
+    }
+    
+    private func scheduleOrientationUpdate() {
+        orientationUpdateTask?.cancel()
+        orientationUpdateTask = Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if !Task.isCancelled {
+                await MainActor.run {
+                    self.updateDeviceOrientation()
+                }
+            }
+        }
     }
     
     private func updateDeviceOrientation() {
@@ -272,6 +286,7 @@ class VideoPlayerModel: NSObject, ObservableObject {
     }
     
     func resetOrientation() {
+        orientationUpdateTask?.cancel()
         if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
             let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .all)
             windowScene.requestGeometryUpdate(geometryPreferences) { _ in }
@@ -579,27 +594,32 @@ struct FullScreenVideoPlayer: View {
     let onClose: () -> Void
     
     @ObservedObject private var playerModel = VideoPlayerModel.shared
+    @State private var controlsVisible = true
     
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            
-            if let controller = playerModel.playerController {
-                VideoPlayerViewControllerRepresentable(controller: controller)
+        GeometryReader { geometry in
+            ZStack {
+                Color.black.ignoresSafeArea()
+                
+                VideoPlayerViewControllerRepresentable(playerController: playerModel.playerController)
                     .ignoresSafeArea(.all)
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                
+                if playerModel.showControls {
+                    controlsOverlay
+                        .transition(.opacity)
+                }
             }
-            
-            if playerModel.showControls {
-                controlsOverlay
-                    .transition(.opacity)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                playerModel.toggleControls()
             }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            playerModel.toggleControls()
         }
         .ignoresSafeArea(.all)
         .statusBar(hidden: true)
+        .onAppear {
+            controlsVisible = playerModel.showControls
+        }
     }
     
     @ViewBuilder
@@ -729,13 +749,19 @@ struct FullScreenVideoPlayer: View {
 }
 
 struct VideoPlayerViewControllerRepresentable: UIViewControllerRepresentable {
-    let controller: AVPlayerViewController
+    let playerController: AVPlayerViewController?
     
-    func makeUIViewController(context: Context) -> AVPlayerViewController {
-        return controller
+    func makeUIViewController(context: Context) -> UIViewController {
+        if let controller = playerController {
+            return controller
+        } else {
+            let emptyController = UIViewController()
+            emptyController.view.backgroundColor = .black
+            return emptyController
+        }
     }
     
-    func updateUIViewController(_ uiViewController: AVPlayerViewController, context: Context) {
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
     }
 }
 
