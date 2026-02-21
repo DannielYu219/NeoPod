@@ -57,78 +57,84 @@ struct ContentView: View {
     private var isShowingHTML: Bool {
         devSelectedFile != nil
     }
+    
+    // 计算是否正在显示视频播放器（全屏模式）
+    private var isShowingVideoPlayer: Bool {
+        currentPage == .video && videoIsShowingPlayer
+    }
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
                 ZuneBackground()
                 
-                // 主内容区域
-                VStack(spacing: 20) {
-                    // 只在非 HTML 预览时显示 TopBar
-                    if !isShowingHTML {
-                        ZuneTopBar(
-                            title: titleForPage(currentPage),
-                            accent: accent,
-                            showsBack: currentPage != .home,
-                            onBack: {
-                                if currentPage == .music, musicIsShowingPlayer {
-                                    withAnimation(.easeOut(duration: 0.28)) {
-                                        musicIsShowingPlayer = false
+                if isShowingVideoPlayer {
+                    destinationView(for: .video)
+                        .ignoresSafeArea(.all)
+                } else {
+                    VStack(spacing: 20) {
+                        if !isShowingHTML {
+                            ZuneTopBar(
+                                title: titleForPage(currentPage),
+                                accent: accent,
+                                showsBack: currentPage != .home,
+                                onBack: {
+                                    if currentPage == .music, musicIsShowingPlayer {
+                                        withAnimation(.easeOut(duration: 0.28)) {
+                                            musicIsShowingPlayer = false
+                                        }
+                                        return
                                     }
-                                    return
-                                }
-                                
-                                if currentPage == .video, videoIsShowingPlayer {
-                                    withAnimation(.easeOut(duration: 0.28)) {
-                                        videoIsShowingPlayer = false
+                                    
+                                    if currentPage == .video, videoIsShowingPlayer {
+                                        withAnimation(.easeOut(duration: 0.28)) {
+                                            videoIsShowingPlayer = false
+                                        }
+                                        return
                                     }
-                                    return
+                                    
+                                    isForwardNavigation = false
+                                    withAnimation(.easeOut(duration: 0.28)) {
+                                        currentPage = .home
+                                    }
                                 }
-                                
-                                isForwardNavigation = false
-                                withAnimation(.easeOut(duration: 0.28)) {
-                                    currentPage = .home
+                            )
+                            .overlay(alignment: .trailing) {
+                                if playerModel.currentItem != nil {
+                                    Button {
+                                        navigateToNowPlaying()
+                                    } label: {
+                                        Image(systemName: "waveform")
+                                            .font(.system(size: 20, weight: .bold))
+                                            .foregroundColor(accent)
+                                            .padding(8)
+                                            .contentShape(Rectangle())
+                                    }
+                                    .buttonStyle(.plain)
+                                    .transition(.opacity)
                                 }
-                            }
-                        )
-                        // 在 Header 右侧覆盖一个"正在播放"按钮
-                        .overlay(alignment: .trailing) {
-                            if playerModel.currentItem != nil {
-                                Button {
-                                    navigateToNowPlaying()
-                                } label: {
-                                    Image(systemName: "waveform")
-                                        .font(.system(size: 20, weight: .bold))
-                                        .foregroundColor(accent)
-                                        .padding(8)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .transition(.opacity)
                             }
                         }
+                        
+                        contentArea
                     }
+                    .padding(.horizontal, 24)
+                    .padding(.top, isShowingHTML ? 0 : 80)
                     
-                    contentArea
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, isShowingHTML ? 0 : 80)
-                
-                // HTML 预览覆盖层（完全全屏）
-                if let file = devSelectedFile {
-                    HTMLPreviewOverlay(file: file, onClose: {
-                        withAnimation(.easeOut(duration: 0.28)) {
-                            devSelectedFile = nil
-                        }
-                    })
-                    .transition(.opacity)
+                    if let file = devSelectedFile {
+                        HTMLPreviewOverlay(file: file, onClose: {
+                            withAnimation(.easeOut(duration: 0.28)) {
+                                devSelectedFile = nil
+                            }
+                        })
+                        .transition(.opacity)
+                    }
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
         }
         .foregroundColor(.white)
-        .statusBarHidden(isShowingHTML)
+        .statusBarHidden(isShowingHTML || isShowingVideoPlayer)
         .edgesIgnoringSafeArea(.all)
     }
     
