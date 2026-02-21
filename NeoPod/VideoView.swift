@@ -150,8 +150,6 @@ class VideoPlayerModel: NSObject, ObservableObject {
     @Published var progress: Double = 0
     @Published var duration: Double = 1
     @Published var currentItem: VideoDisplayItem?
-    @Published var isBuffering = false
-    @Published var videoSize: CGSize = .zero
     @Published var showControls: Bool = true
     
     var playerController: AVPlayerViewController?
@@ -160,8 +158,6 @@ class VideoPlayerModel: NSObject, ObservableObject {
     private var timeObserver: Any?
     private var cancellables = Set<AnyCancellable>()
     private var controlsHideTask: Task<Void, Never>?
-    private var orientationUpdateTask: Task<Void, Never>?
-    private(set) var isLandscape: Bool = true
     
     override init() {
         super.init()
@@ -241,56 +237,10 @@ class VideoPlayerModel: NSObject, ObservableObject {
                 if !seconds.isNaN && !seconds.isInfinite && seconds > 0 {
                     await MainActor.run { self.duration = seconds }
                 }
-                
-                let tracks = try await asset.load(.tracks)
-                if let videoTrack = tracks.first(where: { $0.mediaType == .video }) {
-                    let naturalSize = try await videoTrack.load(.naturalSize)
-                    let transform = try await videoTrack.load(.preferredTransform)
-                    let videoSize = naturalSize.applying(transform)
-                    
-                    await MainActor.run {
-                        self.videoSize = CGSize(width: abs(videoSize.width), height: abs(videoSize.height))
-                        self.isLandscape = self.videoSize.width >= self.videoSize.height
-                    }
-                    
-                    self.scheduleOrientationUpdate()
-                }
             } catch {}
         }
         
         scheduleControlsHide()
-    }
-    
-    private func scheduleOrientationUpdate() {
-        orientationUpdateTask?.cancel()
-        orientationUpdateTask = Task {
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            if !Task.isCancelled {
-                await MainActor.run {
-                    self.updateDeviceOrientation()
-                }
-            }
-        }
-    }
-    
-    private func updateDeviceOrientation() {
-        let orientationMask: UIInterfaceOrientationMask = isLandscape ? .landscape : .portrait
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: orientationMask)
-            windowScene.requestGeometryUpdate(geometryPreferences) { error in
-                if let error = error as? NSError {
-                    print("Failed to update orientation: \(error)")
-                }
-            }
-        }
-    }
-    
-    func resetOrientation() {
-        orientationUpdateTask?.cancel()
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
-            let geometryPreferences = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .all)
-            windowScene.requestGeometryUpdate(geometryPreferences) { _ in }
-        }
     }
     
     func toggleControls() {
@@ -339,7 +289,6 @@ class VideoPlayerModel: NSObject, ObservableObject {
         progress = 0
         isPlaying = false
         playerController = nil
-        resetOrientation()
     }
     
     func seek(to time: TimeInterval) {
