@@ -30,12 +30,12 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		2F84075A2F41687B006E4B64 /* Exceptions for "NeoPod" folder in "NeoPod" target */ = {
+		2F9E0EC32F4C992200501162 /* Exceptions for "NeoPod" folder in "NeoPod" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				API_USAGE.md,
 				Info.plist,
-				WebViewForFileHandling.swift,
-				WebViewWrapper.swift,
+				test_plugin.html,
 			);
 			target = 2FCDE7FF2F40812E005B322D /* NeoPod */;
 		};
@@ -45,7 +45,7 @@
 		2FCDE8022F40812E005B322D /* NeoPod */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				2F84075A2F41687B006E4B64 /* Exceptions for "NeoPod" folder in "NeoPod" target */,
+				2F9E0EC32F4C992200501162 /* Exceptions for "NeoPod" folder in "NeoPod" target */,
 			);
 			path = NeoPod;
 			sourceTree = "<group>";

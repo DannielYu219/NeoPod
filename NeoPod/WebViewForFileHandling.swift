@@ -134,7 +134,7 @@ class FileOperationManager: NSObject {
     }
 }
 
-struct WebView: UIViewRepresentable {
+struct WebViewForFileHandling: UIViewRepresentable {
     let url: URL
     let onClose: () -> Void
     
@@ -336,7 +336,7 @@ struct WebView: UIViewRepresentable {
         
         private func callback(id: Int, result: [String: Any]?) {
             guard let completionPair = pendingCalls[id] else { return }
-            completionPair.resolve(result)
+            completionPair.result(result)
             pendingCalls.removeValue(forKey: id)
         }
         

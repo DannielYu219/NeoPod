@@ -8,7 +8,7 @@
 import SwiftUI
 import AVFoundation
 import MediaPlayer
-import Combine
+internal import Combine
 import AVKit
 
 enum VideoSource {
@@ -187,12 +187,20 @@ class VideoPlayerModel: NSObject, ObservableObject {
         let layer = AVPlayerLayer()
         layer.videoGravity = .resizeAspect
         self.playerLayer = layer
+        playerLayerDidCreate()
         return layer
     }
     
+    // 存储待播放的视频信息
+    private var pendingPlayback: (url: URL, item: VideoDisplayItem)?
+    
     func playLocal(url: URL, displayItem: VideoDisplayItem) {
         let accessing = url.startAccessingSecurityScopedResource()
-        setupPlayer(url: url, item: displayItem)
+        if let _ = playerLayer {
+            setupPlayer(url: url, item: displayItem)
+        } else {
+            pendingPlayback = (url, displayItem)
+        }
         if accessing { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { url.stopAccessingSecurityScopedResource() } }
     }
     
@@ -203,10 +211,22 @@ class VideoPlayerModel: NSObject, ObservableObject {
             try data.write(to: tempURL)
             
             await MainActor.run {
-                self.setupPlayer(url: tempURL, item: displayItem)
+                if let _ = self.playerLayer {
+                    self.setupPlayer(url: tempURL, item: displayItem)
+                } else {
+                    self.pendingPlayback = (tempURL, displayItem)
+                }
             }
         } catch {
             print("Failed to play SMB file: \(error)")
+        }
+    }
+    
+    // 当playerLayer创建后调用
+    func playerLayerDidCreate() {
+        if let pending = pendingPlayback {
+            setupPlayer(url: pending.url, item: pending.item)
+            pendingPlayback = nil
         }
     }
     
@@ -581,7 +601,7 @@ struct FullScreenVideoPlayer: UIViewControllerRepresentable {
 class VideoPlayerContainerViewController: UIViewController {
     var onClose: (() -> Void)?
     private var playerLayerView: UIView?
-    private var controlsView: VideoControlsView?
+    private var controlsHostingController: UIHostingController<VideoControlsView>?
     private var hideControlsTask: Task<Void, Never>?
     
     override func viewDidLoad() {
@@ -599,7 +619,6 @@ class VideoPlayerContainerViewController: UIViewController {
         playerView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         
         playerLayer.frame = playerView.bounds
-        playerLayer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         playerView.layer.addSublayer(playerLayer)
         
         view.addSubview(playerView)
@@ -607,7 +626,7 @@ class VideoPlayerContainerViewController: UIViewController {
     }
     
     private func setupControlsView() {
-        let controls = VideoControlsView()
+        var controls = VideoControlsView()
         controls.onClose = { [weak self] in
             self?.onClose?()
         }
@@ -634,7 +653,7 @@ class VideoPlayerContainerViewController: UIViewController {
         view.addSubview(hostingController.view)
         hostingController.didMove(toParent: self)
         
-        controlsView = controls
+        controlsHostingController = hostingController
         
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleTap))
         tapGesture.delegate = self
@@ -645,7 +664,7 @@ class VideoPlayerContainerViewController: UIViewController {
     
     @objc private func handleTap() {
         VideoPlayerModel.shared.showControls.toggle()
-        controlsView?.isHidden = !VideoPlayerModel.shared.showControls
+        controlsHostingController?.view.isHidden = !VideoPlayerModel.shared.showControls
         if VideoPlayerModel.shared.showControls {
             scheduleHideControls()
         }
@@ -659,7 +678,7 @@ class VideoPlayerContainerViewController: UIViewController {
                 await MainActor.run {
                     if VideoPlayerModel.shared.isPlaying {
                         VideoPlayerModel.shared.showControls = false
-                        self.controlsView?.isHidden = true
+                        self.controlsHostingController?.view.isHidden = true
                     }
                 }
             }
@@ -667,7 +686,7 @@ class VideoPlayerContainerViewController: UIViewController {
     }
     
     func updatePlayer() {
-        controlsView?.isHidden = !VideoPlayerModel.shared.showControls
+        controlsHostingController?.view.isHidden = !VideoPlayerModel.shared.showControls
         if VideoPlayerModel.shared.showControls && VideoPlayerModel.shared.isPlaying {
             scheduleHideControls()
         }

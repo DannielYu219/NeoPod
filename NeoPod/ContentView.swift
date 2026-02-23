@@ -297,12 +297,12 @@ struct WebView: UIViewRepresentable {
     let url: URL
     let onClose: () -> Void
     
-    // 共享的 URL Scheme Handler
+    // 共享的 URL Scheme Handler - 保持现有引用
     private static let urlSchemeHandler = AppURLSchemeHandler()
     
     func makeUIView(context: Context) -> InternalWebView {
         let configuration = WKWebViewConfiguration()
-        configuration.defaultWebpagePreferences.allowsContentJavaScript = true
+        configuration.preferences.javaScriptEnabled = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         
         // 注册 app:// URL Scheme Handler
@@ -313,24 +313,12 @@ struct WebView: UIViewRepresentable {
         contentController.add(context.coordinator, name: "NeoPodBridge")
         configuration.userContentController = contentController
         
-        // 注入 JavaScript API（包含文件操作）
+        // 注入 JavaScript API - 包含文件操作API
         let scriptSource = """
         (function() {
-            const callbacks = {};
-            let callbackId = 0;
-
-            function callNative(action, payload) {
-                return new Promise((resolve, reject) => {
-                    const id = ++callbackId;
-                    callbacks[id] = { resolve, reject };
-                    window.webkit.messageHandlers.NeoPodBridge.postMessage({
-                        action: 'file',
-                        id: id,
-                        payload: Object.assign({ action: action }, payload || {})
-                    });
-                });
-            }
-
+            // Create global storage for pending file write operations
+            window.pendingOperations = new Map();
+            
             window.NeoPod = {
                 close: function() {
                     window.webkit.messageHandlers.NeoPodBridge.postMessage({ action: 'close' });
@@ -338,39 +326,97 @@ struct WebView: UIViewRepresentable {
                 navigateBack: function() {
                     window.webkit.messageHandlers.NeoPodBridge.postMessage({ action: 'navigateBack' });
                 },
-                readDir: async function(path) {
-                    const result = await callNative('readDir', { path: path });
-                    return result.files || [];
-                },
-                readFile: async function(path) {
-                    const result = await callNative('readFile', { path: path });
-                    return result.content || '';
-                },
-                writeFile: async function(path, content) {
-                    return await callNative('writeFile', { path: path, content: String(content) });
-                },
-                deleteFile: async function(path) {
-                    return await callNative('deleteFile', { path: path });
-                },
-                __resolve: function(id, result) {
-                    if (callbacks[id]) {
-                        callbacks[id].resolve(result);
-                        delete callbacks[id];
+                
+                // Async file read operation
+                readFile: async function(filePath) {
+                    try {
+                        const response = await fetch('app://' + filePath);
+                        if (!response.ok) {
+                            throw new Error(`File read failed with status ${response.status}`);
+                        }
+                        return await response.text();
+                    } catch (error) {
+                        throw new Error('Read operation failed: ' + error.message);
                     }
                 },
-                __reject: function(id, message) {
-                    if (callbacks[id]) {
-                        callbacks[id].reject(new Error(message));
-                        delete callbacks[id];
+                
+                // Read directory operation
+                readDir: async function(folderPath) {
+                    try {
+                        const path = folderPath.endsWith('/') ? folderPath : folderPath + '/';
+                        const response = await fetch('app://' + path + 'list');
+                        
+                        if (!response.ok) {
+                            throw new Error(`Directory read failed with status ${response.status}`);
+                        }
+                        
+                        const data = await response.json();
+                        if (!data.success) {
+                            throw new Error('Server returned error: ' + (data.message || 'Unknown'));
+                        }
+                        
+                        return data.files;
+                    } catch (error) {
+                        throw new Error('Directory read operation failed: ' + error.message);
+                    }
+                },
+                
+                // Write file through bridge since direct fetch PUT might not contain body
+                writeTextFile: async function(filePath, content) {
+                    // Store operation in a pending map to handle via script communication
+                    const operationId = Date.now() + Math.random().toString(36).substr(2, 9);
+                    window.pendingFilePaths = window.pendingFilePaths || {};
+                    window.pendingFilePaths[operationId] = { path: filePath, content: String(content) };
+                    
+                    return new Promise((resolve, reject) => {
+                        // Send through JS bridge (we'll modify the bridge to handle this specifically later)
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('POST', 'app://pending/' + operationId, true);
+                        xhr.onload = function() {
+                            if (xhr.status >= 200 && xhr.status < 300) {
+                                resolve(xhr.responseText);
+                            } else {
+                                reject(new Error('File write failed: status ' + xhr.status));
+                            }
+                        };
+                        xhr.onerror = function() {
+                            reject(new Error('Network error'));
+                        };
+                        xhr.setRequestHeader('Content-Type', 'application/json');
+                        xhr.send(JSON.stringify({ content: String(content) }));
+                    });
+                },
+                
+                deleteFile: async function(filePath, callback) {
+                    try {
+                        const response = await fetch('app://' + filePath, { method: 'DELETE' });
+                        
+                        if (!response.ok) {
+                            throw new Error(`File deletion failed with status ${response.status}`);
+                        }
+                        
+                        const result = await response.json();
+                        if (typeof callback === 'function') {
+                            callback(null, result.success ? result : { error: 'Success response malformed' });
+                        }
+                        return result;
+                    } catch (error) {
+                        const err = new Error('Delete operation failed: ' + error.message);
+                        if (typeof callback === 'function') {
+                            callback(err, null);
+                        }
+                        throw err;
                     }
                 }
             };
             
-            // 兼容标准窗口关闭调用
+            // Allow standard window closing
             var originalClose = window.close;
             window.close = function() {
                 window.NeoPod.close();
             };
+            
+            console.log('NeoPod API initialized successfully');
         })();
         """
         
@@ -383,14 +429,15 @@ struct WebView: UIViewRepresentable {
         
         let webView = InternalWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator  // Add UI delegate to handle certain navigations
+        
+        // Configure scroll behavior
         webView.scrollView.bounces = true
         webView.scrollView.showsVerticalScrollIndicator = false
         webView.scrollView.showsHorizontalScrollIndicator = false
         
-        // 关键修复：禁用安全区 inset
+        // Disable safe area inset adjustments
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        
-        // 设置 autoresizing 以填充整个父视图
         webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         webView.translatesAutoresizingMaskIntoConstraints = true
         
@@ -398,47 +445,24 @@ struct WebView: UIViewRepresentable {
     }
     
     func updateUIView(_ uiView: InternalWebView, context: Context) {
-        guard uiView.url != url else { return }
-        
-        if url.isFileURL {
-            let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-            let devURL = FileSystemManager.devFolderURL()
-            let programURL = FileSystemManager.programFolderURL()
-            let readAccessURL: URL
-            
-            if let devURL, url.path.hasPrefix(devURL.path) {
-                readAccessURL = devURL
-            } else if let programURL, url.path.hasPrefix(programURL.path) {
-                readAccessURL = programURL
-            } else if let documentsURL, url.path.hasPrefix(documentsURL.path) {
-                readAccessURL = documentsURL
-            } else {
-                readAccessURL = url.deletingLastPathComponent()
-            }
-            
-            uiView.loadFileURL(url, allowingReadAccessTo: readAccessURL)
-        } else {
-            let request = URLRequest(url: url)
-            uiView.load(request)
-        }
+        let request = URLRequest(url: url)
+        uiView.load(request)
     }
     
     func makeCoordinator() -> Coordinator {
         Coordinator(onClose: onClose)
     }
     
-    // 自定义 WKWebView 子类，重写 layoutSubviews 以确保填满
     class InternalWebView: WKWebView {
         override func layoutSubviews() {
             super.layoutSubviews()
-            // 确保 webView 始终填满父容器
             if let superview = superview {
                 frame = superview.bounds
             }
         }
     }
     
-    class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+    class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let onClose: () -> Void
         
         init(onClose: @escaping () -> Void) {
@@ -447,170 +471,28 @@ struct WebView: UIViewRepresentable {
         }
         
         // MARK: - WKScriptMessageHandler
-        
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard let body = message.body as? [String: Any],
-                  let action = body["action"] as? String else {
+            guard let body = message.body as? [String: String],
+                  let action = body["action"] else {
                 return
             }
             
-            switch action {
-            case "close":
-                DispatchQueue.main.async {
+            DispatchQueue.main.async {
+                switch action {
+                case "close":
                     self.onClose()
-                }
-            case "navigateBack":
-                break
-            case "file":
-                guard let id = body["id"] as? Int,
-                      let payload = body["payload"] as? [String: Any],
-                      let webView = message.webView else {
-                    return
-                }
-                handleFileOperation(payload: payload, id: id, webView: webView)
-            default:
-                break
-            }
-        }
-        
-        private func handleFileOperation(payload: [String: Any], id: Int, webView: WKWebView) {
-            guard let operation = payload["action"] as? String else {
-                sendReject(id: id, message: "Missing file operation", webView: webView)
-                return
-            }
-            
-            let path = payload["path"] as? String ?? ""
-            
-            do {
-                switch operation {
-                case "readDir":
-                    let result = try readDirectory(path: path)
-                    sendResolve(id: id, result: result, webView: webView)
-                case "readFile":
-                    let result = try readFile(path: path)
-                    sendResolve(id: id, result: result, webView: webView)
-                case "writeFile":
-                    let content = payload["content"] as? String ?? ""
-                    let result = try writeFile(path: path, content: content)
-                    sendResolve(id: id, result: result, webView: webView)
-                case "deleteFile":
-                    let result = try deleteFile(path: path)
-                    sendResolve(id: id, result: result, webView: webView)
+                case "navigateBack":
+                    // Additional navigation functionality if needed
+                    break
                 default:
-                    sendReject(id: id, message: "Unsupported file operation: \(operation)", webView: webView)
+                    break
                 }
-            } catch {
-                sendReject(id: id, message: error.localizedDescription, webView: webView)
             }
-        }
-        
-        private func readDirectory(path: String) throws -> [String: Any] {
-            let targetURL = try resolvePath(path: path, isDirectory: true)
-            
-            let fileURLs = try FileManager.default.contentsOfDirectory(
-                at: targetURL,
-                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey],
-                options: [.skipsHiddenFiles]
-            )
-            
-            var files: [[String: Any]] = []
-            for fileURL in fileURLs {
-                let values = try fileURL.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey])
-                files.append([
-                    "name": fileURL.lastPathComponent,
-                    "isDirectory": values.isDirectory ?? false,
-                    "size": values.fileSize ?? 0,
-                    "modified": (values.contentModificationDate ?? Date()).timeIntervalSince1970
-                ])
-            }
-            
-            return [
-                "success": true,
-                "files": files
-            ]
-        }
-        
-        private func readFile(path: String) throws -> [String: Any] {
-            let fileURL = try resolvePath(path: path, isDirectory: false)
-            let data = try Data(contentsOf: fileURL)
-            let content = String(data: data, encoding: .utf8) ?? ""
-            return [
-                "success": true,
-                "content": content
-            ]
-        }
-        
-        private func writeFile(path: String, content: String) throws -> [String: Any] {
-            let fileURL = try resolvePath(path: path, isDirectory: false)
-            let directoryURL = fileURL.deletingLastPathComponent()
-            if !FileManager.default.fileExists(atPath: directoryURL.path) {
-                try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
-            }
-            let data = content.data(using: .utf8) ?? Data()
-            try data.write(to: fileURL, options: .atomic)
-            return [
-                "success": true,
-                "path": path
-            ]
-        }
-        
-        private func deleteFile(path: String) throws -> [String: Any] {
-            let fileURL = try resolvePath(path: path, isDirectory: false)
-            if FileManager.default.fileExists(atPath: fileURL.path) {
-                try FileManager.default.removeItem(at: fileURL)
-            }
-            return [
-                "success": true,
-                "path": path
-            ]
-        }
-        
-        private func resolvePath(path: String, isDirectory: Bool) throws -> URL {
-            guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-                throw NSError(domain: "NeoPodFile", code: 500, userInfo: [NSLocalizedDescriptionKey: "Documents directory not found"])
-            }
-            
-            let trimmedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-            let components = trimmedPath.split(separator: "/").map(String.init)
-            guard let folder = components.first, FileSystemManager.allowedFolders.contains(folder.lowercased()) else {
-                throw NSError(domain: "NeoPodFile", code: 403, userInfo: [NSLocalizedDescriptionKey: "Access denied"])
-            }
-            
-            let folderURL = documentsURL.appendingPathComponent(folder, isDirectory: true)
-            let remaining = components.dropFirst().joined(separator: "/")
-            let targetURL = remaining.isEmpty
-                ? folderURL
-                : folderURL.appendingPathComponent(remaining, isDirectory: isDirectory)
-            
-            guard targetURL.path.hasPrefix(folderURL.path) else {
-                throw NSError(domain: "NeoPodFile", code: 403, userInfo: [NSLocalizedDescriptionKey: "Path traversal detected"])
-            }
-            
-            return targetURL
-        }
-        
-        private func sendResolve(id: Int, result: [String: Any], webView: WKWebView) {
-            guard let data = try? JSONSerialization.data(withJSONObject: result),
-                  let jsonString = String(data: data, encoding: .utf8) else {
-                sendReject(id: id, message: "Failed to encode response", webView: webView)
-                return
-            }
-            webView.evaluateJavaScript("window.NeoPod.__resolve(\(id), \(jsonString));")
-        }
-        
-        private func sendReject(id: Int, message: String, webView: WKWebView) {
-            let escaped = message
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "\"", with: "\\\"")
-                .replacingOccurrences(of: "\n", with: "\\n")
-                .replacingOccurrences(of: "\r", with: "\\r")
-            webView.evaluateJavaScript("window.NeoPod.__reject(\(id), \"\(escaped)\");")
         }
         
         // MARK: - WKNavigationDelegate
-        
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            print("WebView finished loading")
+            print("WebView loaded successfully")
         }
         
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
@@ -618,6 +500,7 @@ struct WebView: UIViewRepresentable {
         }
     }
 }
+
 
 private struct ZuneMenuRow: View {
     let title: String
