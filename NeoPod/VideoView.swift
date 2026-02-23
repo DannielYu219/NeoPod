@@ -196,6 +196,7 @@ class VideoPlayerModel: NSObject, ObservableObject {
     
     func playLocal(url: URL, displayItem: VideoDisplayItem) {
         let accessing = url.startAccessingSecurityScopedResource()
+        currentItem = displayItem // 立即设置currentItem，确保VideoView能显示FullScreenVideoPlayer
         if let _ = playerLayer {
             setupPlayer(url: url, item: displayItem)
         } else {
@@ -211,6 +212,7 @@ class VideoPlayerModel: NSObject, ObservableObject {
             try data.write(to: tempURL)
             
             await MainActor.run {
+                self.currentItem = displayItem // 立即设置currentItem
                 if let _ = self.playerLayer {
                     self.setupPlayer(url: tempURL, item: displayItem)
                 } else {
@@ -219,6 +221,9 @@ class VideoPlayerModel: NSObject, ObservableObject {
             }
         } catch {
             print("Failed to play SMB file: \(error)")
+            await MainActor.run {
+                self.currentItem = nil // 出错时清空currentItem
+            }
         }
     }
     
@@ -623,6 +628,11 @@ class VideoPlayerContainerViewController: UIViewController {
         
         view.addSubview(playerView)
         playerLayerView = playerView
+        
+        // 确保playerLayer有正确的player引用
+        if let player = VideoPlayerModel.shared.player {
+            playerLayer.player = player
+        }
     }
     
     private func setupControlsView() {
