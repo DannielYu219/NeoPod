@@ -626,7 +626,8 @@ class VideoPlayerContainerViewController: UIViewController {
         playerLayer.frame = playerView.bounds
         playerView.layer.addSublayer(playerLayer)
         
-        view.addSubview(playerView)
+        // 将playerView添加到最底层
+        view.insertSubview(playerView, at: 0)
         playerLayerView = playerView
         
         // 确保playerLayer有正确的player引用
@@ -699,6 +700,13 @@ class VideoPlayerContainerViewController: UIViewController {
         controlsHostingController?.view.isHidden = !VideoPlayerModel.shared.showControls
         if VideoPlayerModel.shared.showControls && VideoPlayerModel.shared.isPlaying {
             scheduleHideControls()
+        }
+        
+        // 确保playerLayer有正确的player引用
+        if let playerLayer = VideoPlayerModel.shared.playerLayer, let player = VideoPlayerModel.shared.player {
+            if playerLayer.player != player {
+                playerLayer.player = player
+            }
         }
     }
     
@@ -890,11 +898,6 @@ private struct VideoRowView: View {
                 .contentShape(Rectangle())
                 .scaleEffect(scale, anchor: .leading)
                 .opacity(opacity)
-                .onChange(of: frame.midY) { newValue in
-                    if abs(newValue - containerMidY) < threshold {
-                        onFocused()
-                    }
-                }
             }
             .frame(height: 72)
         }
