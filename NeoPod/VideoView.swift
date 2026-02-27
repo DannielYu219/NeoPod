@@ -154,7 +154,6 @@ class VideoPlayerModel: NSObject, ObservableObject {
     @Published var playerReady: Bool = false
     
     var player: AVPlayer?
-    var playerLayer: AVPlayerLayer?
     private var playerItem: AVPlayerItem?
     private var timeObserver: Any?
     private var cancellables = Set<AnyCancellable>()
@@ -180,28 +179,10 @@ class VideoPlayerModel: NSObject, ObservableObject {
         commandCenter.pauseCommand.addTarget { [weak self] _ in self?.pause(); return .success }
     }
     
-    func createPlayerLayer() -> AVPlayerLayer {
-        if let existingLayer = playerLayer {
-            return existingLayer
-        }
-        let layer = AVPlayerLayer()
-        layer.videoGravity = .resizeAspect
-        self.playerLayer = layer
-        playerLayerDidCreate()
-        return layer
-    }
-    
-    // 存储待播放的视频信息
-    private var pendingPlayback: (url: URL, item: VideoDisplayItem)?
-    
     func playLocal(url: URL, displayItem: VideoDisplayItem) {
         let accessing = url.startAccessingSecurityScopedResource()
         currentItem = displayItem // 立即设置currentItem，确保VideoView能显示FullScreenVideoPlayer
-        if let _ = playerLayer {
-            setupPlayer(url: url, item: displayItem)
-        } else {
-            pendingPlayback = (url, displayItem)
-        }
+        setupPlayer(url: url, item: displayItem)
         if accessing { DispatchQueue.main.asyncAfter(deadline: .now() + 1) { url.stopAccessingSecurityScopedResource() } }
     }
     
@@ -213,25 +194,13 @@ class VideoPlayerModel: NSObject, ObservableObject {
             
             await MainActor.run {
                 self.currentItem = displayItem // 立即设置currentItem
-                if let _ = self.playerLayer {
-                    self.setupPlayer(url: tempURL, item: displayItem)
-                } else {
-                    self.pendingPlayback = (tempURL, displayItem)
-                }
+                self.setupPlayer(url: tempURL, item: displayItem)
             }
         } catch {
             print("Failed to play SMB file: \(error)")
             await MainActor.run {
                 self.currentItem = nil // 出错时清空currentItem
             }
-        }
-    }
-    
-    // 当playerLayer创建后调用
-    func playerLayerDidCreate() {
-        if let pending = pendingPlayback {
-            setupPlayer(url: pending.url, item: pending.item)
-            pendingPlayback = nil
         }
     }
     
@@ -247,8 +216,6 @@ class VideoPlayerModel: NSObject, ObservableObject {
         let asset = AVURLAsset(url: url)
         playerItem = AVPlayerItem(asset: asset)
         player = AVPlayer(playerItem: playerItem)
-        
-        playerLayer?.player = player
         
         currentItem = item
         isPlaying = true
@@ -335,7 +302,6 @@ class VideoPlayerModel: NSObject, ObservableObject {
         player?.seek(to: .zero)
         progress = 0
         isPlaying = false
-        playerLayer?.player = nil
         player = nil
         currentItem = nil
         playerReady = false
@@ -605,35 +571,31 @@ struct FullScreenVideoPlayer: UIViewControllerRepresentable {
 
 class VideoPlayerContainerViewController: UIViewController {
     var onClose: (() -> Void)?
-    private var playerLayerView: UIView?
+    private var playerViewController: AVPlayerViewController?
     private var controlsHostingController: UIHostingController<VideoControlsView>?
     private var hideControlsTask: Task<Void, Never>?
     
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
-        setupPlayerLayerView()
+        setupPlayerViewController()
         setupControlsView()
     }
     
-    private func setupPlayerLayerView() {
-        let playerLayer = VideoPlayerModel.shared.createPlayerLayer()
-        let playerView = UIView()
-        playerView.backgroundColor = .black
-        playerView.frame = view.bounds
-        playerView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    private func setupPlayerViewController() {
+        let playerController = AVPlayerViewController()
+        playerController.showsPlaybackControls = false
+        playerController.videoGravity = .resizeAspect
+        playerController.view.backgroundColor = .black
+        playerController.view.frame = view.bounds
+        playerController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         
-        playerLayer.frame = playerView.bounds
-        playerView.layer.addSublayer(playerLayer)
+        addChild(playerController)
+        view.insertSubview(playerController.view, at: 0)
+        playerController.didMove(toParent: self)
         
-        // 将playerView添加到最底层
-        view.insertSubview(playerView, at: 0)
-        playerLayerView = playerView
-        
-        // 确保playerLayer有正确的player引用
-        if let player = VideoPlayerModel.shared.player {
-            playerLayer.player = player
-        }
+        playerViewController = playerController
+        updatePlayer()
     }
     
     private func setupControlsView() {
@@ -702,21 +664,12 @@ class VideoPlayerContainerViewController: UIViewController {
             scheduleHideControls()
         }
         
-        // 确保playerLayer有正确的player引用
-        if let playerLayer = VideoPlayerModel.shared.playerLayer, let player = VideoPlayerModel.shared.player {
-            if playerLayer.player != player {
-                playerLayer.player = player
+        if let player = VideoPlayerModel.shared.player {
+            if playerViewController?.player !== player {
+                playerViewController?.player = player
             }
-        }
-    }
-    
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        if let playerLayer = VideoPlayerModel.shared.playerLayer {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            playerLayer.frame = playerLayerView?.bounds ?? view.bounds
-            CATransaction.commit()
+        } else if playerViewController?.player != nil {
+            playerViewController?.player = nil
         }
     }
 }
