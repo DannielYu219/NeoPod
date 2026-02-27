@@ -1,0 +1,981 @@
+<!--
+文件作用：测试HTML插件应用，包含计数器、主题颜色切换、待办事项、统计信息和文件系统API测试
+依赖：NeoPod文件系统API
+输入：用户点击按钮、选择颜色、输入待办事项、文件操作
+输出：实时显示计数值、更新主题颜色、显示待办事项列表、统计使用数据、文件操作结果
+实现方式：使用JavaScript变量存储状态，通过DOM操作更新界面，LocalStorage和NeoPod文件API用于数据持久化
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>测试插件</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --safe-area-inset-top: env(safe-area-inset-top, 0px);
+            --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+            --safe-area-inset-left: env(safe-area-inset-left, 0px);
+            --safe-area-inset-right: env(safe-area-inset-right, 0px);
+        }
+
+        html {
+            height: 100%;
+            overflow: hidden;
+            min-height: 100%;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #ffffff;
+            height: 100vh;
+            height: 100%;
+            min-height: 100%;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 0;
+            margin: 0;
+            position: relative;
+            z-index: 1;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .app-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            min-height: 100%;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 0;
+            padding-top: 16px;
+            padding-bottom: 16px;
+        }
+
+        .app-title {
+            font-size: 18px;
+            font-weight: 500;
+            color: #f57309;
+            letter-spacing: 1px;
+        }
+
+        .close-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            color: #ffffff;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .close-btn:hover {
+            background: rgba(245, 115, 9, 0.3);
+            transform: rotate(90deg);
+        }
+
+        .close-btn:active {
+            transform: rotate(90deg) scale(0.9);
+        }
+
+        .content-area {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .page {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            padding: 20px;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s ease;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .page.active {
+            opacity: 1;
+            transform: translateX(0);
+            display: block;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 24px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 16px;
+        }
+
+        .card-title {
+            font-size: 20px;
+            font-weight: 500;
+            margin-bottom: 20px;
+            color: #f57309;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .counter-section {
+            text-align: center;
+            padding: 20px 0;
+        }
+
+        .counter-display {
+            font-size: 72px;
+            font-weight: 200;
+            color: #ffffff;
+            margin: 30px 0;
+            transition: all 0.2s ease;
+        }
+
+        .counter-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 16px 40px;
+            border: none;
+            border-radius: 12px;
+            font-size: 18px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #f57309;
+            color: #ffffff;
+        }
+
+        .btn:hover {
+            background: #ff8c3b;
+            transform: scale(1.05);
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-small {
+            padding: 12px 24px;
+            font-size: 16px;
+        }
+
+        .color-picker {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 20px;
+        }
+
+        .color-option {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: 3px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .color-option:hover {
+            transform: scale(1.1);
+        }
+
+        .color-option.active {
+            border-color: #ffffff;
+            box-shadow: 0 0 24px rgba(255, 255, 255, 0.3);
+        }
+
+        .todo-list {
+            list-style: none;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .todo-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .todo-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .todo-checkbox {
+            width: 24px;
+            height: 24px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .todo-checkbox.checked {
+            background: #f57309;
+            border-color: #f57309;
+        }
+
+        .todo-checkbox.checked::after {
+            content: '✓';
+            color: #ffffff;
+            font-size: 14px;
+        }
+
+        .todo-text {
+            flex: 1;
+            font-size: 15px;
+            transition: all 0.2s ease;
+        }
+
+        .todo-text.completed {
+            text-decoration: line-through;
+            opacity: 0.5;
+        }
+
+        .todo-delete {
+            color: #ff4757;
+            cursor: pointer;
+            font-size: 20px;
+            opacity: 0;
+            transition: all 0.2s ease;
+            padding: 4px;
+        }
+
+        .todo-item:hover .todo-delete {
+            opacity: 1;
+        }
+
+        .todo-input {
+            width: 100%;
+            padding: 16px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 16px;
+            margin-bottom: 16px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .todo-input:focus {
+            border-color: #f57309;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .todo-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+
+        .status-item {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+        }
+
+        .status-value {
+            font-size: 28px;
+            font-weight: 600;
+            color: #f57309;
+            margin-bottom: 6px;
+        }
+
+        .status-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .file-input {
+            width: 100%;
+            padding: 16px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 16px;
+            margin-bottom: 16px;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .file-input:focus {
+            border-color: #f57309;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .file-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .file-list {
+            list-style: none;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 10px;
+            margin-bottom: 10px;
+            transition: all 0.2s ease;
+        }
+
+        .file-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .file-icon {
+            font-size: 24px;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-size: 15px;
+            font-weight: 500;
+        }
+
+        .file-meta {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+        }
+
+        .file-delete {
+            color: #ff4757;
+            cursor: pointer;
+            font-size: 20px;
+            opacity: 0;
+            transition: all 0.2s ease;
+            padding: 4px;
+        }
+
+        .file-item:hover .file-delete {
+            opacity: 1;
+        }
+
+        .file-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .log-area {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            padding: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            margin-top: 16px;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: rgba(255, 255, 255, 0.5);
+            margin-right: 8px;
+        }
+
+        .log-success {
+            color: #2ecc71;
+        }
+
+        .log-error {
+            color: #e74c3c;
+        }
+
+        .log-info {
+            color: #3498db;
+        }
+
+        .bottom-nav {
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 20px;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 16px;
+            border: none;
+            background: none;
+            color: rgba(255, 255, 255, 0.5);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border-radius: 8px;
+        }
+
+        .nav-item:hover {
+            color: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-item.active {
+            color: #f57309;
+        }
+
+        .nav-icon {
+            font-size: 24px;
+        }
+
+        .nav-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .pulse {
+            animation: pulse 0.3s ease;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="top-bar">
+            <div class="app-title">测试插件</div>
+            <button class="close-btn" onclick="closeWindow()" aria-label="关闭">✕</button>
+        </div>
+
+        <div class="content-area">
+            <div class="page active" id="page-counter">
+                <div class="card">
+                    <div class="card-title">
+                        <span>📊</span> 计数器
+                    </div>
+                    <div class="counter-section">
+                        <div class="counter-display" id="counter">0</div>
+                        <div class="counter-buttons">
+                            <button class="btn btn-secondary" onclick="decrementCounter()">-1</button>
+                            <button class="btn" onclick="incrementCounter()">+1</button>
+                            <button class="btn btn-secondary" onclick="resetCounter()">重置</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="page-color">
+                <div class="card">
+                    <div class="card-title">
+                        <span>🎨</span> 主题颜色
+                    </div>
+                    <div class="color-picker" id="colorPicker">
+                        <div class="color-option active" style="background: #f57309;" data-color="#f57309"></div>
+                        <div class="color-option" style="background: #3498db;" data-color="#3498db"></div>
+                        <div class="color-option" style="background: #2ecc71;" data-color="#2ecc71"></div>
+                        <div class="color-option" style="background: #9b59b6;" data-color="#9b59b6"></div>
+                        <div class="color-option" style="background: #e74c3c;" data-color="#e74c3c"></div>
+                        <div class="color-option" style="background: #1abc9c;" data-color="#1abc9c"></div>
+                        <div class="color-option" style="background: #f39c12;" data-color="#f39c12"></div>
+                        <div class="color-option" style="background: #e91e63;" data-color="#e91e63"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="page" id="page-todo">
+                <div class="card">
+                    <div class="card-title">
+                        <span>✅</span> 待办事项
+                    </div>
+                    <input type="text" class="todo-input" id="todoInput" placeholder="添加新的待办事项..." onkeypress="handleTodoKeypress(event)">
+                    <ul class="todo-list" id="todoList">
+                        <li class="todo-item">
+                            <div class="todo-checkbox" onclick="toggleTodo(this)"></div>
+                            <span class="todo-text">测试插件功能</span>
+                            <span class="todo-delete" onclick="deleteTodo(this)">×</span>
+                        </li>
+                        <li class="todo-item">
+                            <div class="todo-checkbox" onclick="toggleTodo(this)"></div>
+                            <span class="todo-text">检查WebView兼容性</span>
+                            <span class="todo-delete" onclick="deleteTodo(this)">×</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="page" id="page-files">
+                <div class="card">
+                    <div class="card-title">
+                        <span>📁</span> 文件系统测试
+                    </div>
+                    <input type="text" class="file-input" id="fileInput" placeholder="输入文件名|内容 (例如: test.txt|Hello World)">
+                    <div class="file-actions">
+                        <button class="btn btn-small" onclick="createFile()">创建文件</button>
+                        <button class="btn btn-small btn-secondary" onclick="loadFiles()">刷新列表</button>
+                    </div>
+                    <ul class="file-list" id="fileList"></ul>
+                    <div class="log-area" id="logArea"></div>
+                </div>
+            </div>
+
+            <div class="page" id="page-stats">
+                <div class="card">
+                    <div class="card-title">
+                        <span>📈</span> 统计信息
+                    </div>
+                    <div class="status-grid">
+                        <div class="status-item">
+                            <div class="status-value" id="clickCount">0</div>
+                            <div class="status-label">点击次数</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-value" id="todoCount">2</div>
+                            <div class="status-label">待办事项</div>
+                        </div>
+                        <div class="status-item">
+                            <div class="status-value" id="fileCount">0</div>
+                            <div class="status-label">文件数量</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">
+                        <span>⏱️</span> 使用时间
+                    </div>
+                    <div class="status-item">
+                        <div class="status-value" id="timeElapsed">0s</div>
+                        <div class="status-label">使用时间</div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">
+                        <span>ℹ️</span> 关于
+                    </div>
+                    <div style="color: rgba(255, 255, 255, 0.7); line-height: 1.8;">
+                        <p>NeoPod 测试插件 v2.0</p>
+                        <p>这是一个示例应用，展示了如何在 NeoPod 中开发 HTML 插件。</p>
+                        <p style="margin-top: 12px;">点击底部导航切换不同功能模块。</p>
+                        <p style="margin-top: 12px;">新特性：文件系统 API 测试</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bottom-nav">
+            <button class="nav-item active" data-page="counter" onclick="switchPage('counter')">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">计数器</span>
+            </button>
+            <button class="nav-item" data-page="color" onclick="switchPage('color')">
+                <span class="nav-icon">🎨</span>
+                <span class="nav-label">颜色</span>
+            </button>
+            <button class="nav-item" data-page="todo" onclick="switchPage('todo')">
+                <span class="nav-icon">✅</span>
+                <span class="nav-label">待办</span>
+            </button>
+            <button class="nav-item" data-page="files" onclick="switchPage('files')">
+                <span class="nav-icon">📁</span>
+                <span class="nav-label">文件</span>
+            </button>
+            <button class="nav-item" data-page="stats" onclick="switchPage('stats')">
+                <span class="nav-icon">📈</span>
+                <span class="nav-label">统计</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let counter = 0;
+        let clickCount = 0;
+        let startTime = Date.now();
+        let accentColor = '#f57309';
+        let fileCount = 0;
+
+        function closeWindow() {
+            try {
+                if (typeof NeoPod !== 'undefined' && NeoPod.close) {
+                    NeoPod.close();
+                } else {
+                    window.close();
+                }
+            } catch (error) {
+                console.log('无法关闭窗口:', error);
+            }
+        }
+
+        function switchPage(pageName) {
+            const pages = document.querySelectorAll('.page');
+            const navItems = document.querySelectorAll('.nav-item');
+            
+            pages.forEach(page => {
+                page.classList.remove('active');
+            });
+            
+            navItems.forEach(item => {
+                item.classList.remove('active');
+                if (item.dataset.page === pageName) {
+                    item.classList.add('active');
+                }
+            });
+            
+            document.getElementById('page-' + pageName).classList.add('active');
+            trackClick();
+            
+            if (pageName === 'files') {
+                loadFiles();
+            }
+        }
+
+        function incrementCounter() {
+            counter++;
+            updateCounter();
+            trackClick();
+        }
+
+        function decrementCounter() {
+            counter--;
+            updateCounter();
+            trackClick();
+        }
+
+        function resetCounter() {
+            counter = 0;
+            updateCounter();
+            trackClick();
+        }
+
+        function updateCounter() {
+            const counterEl = document.getElementById('counter');
+            counterEl.textContent = counter;
+            counterEl.classList.add('pulse');
+            setTimeout(() => counterEl.classList.remove('pulse'), 300);
+        }
+
+        function trackClick() {
+            clickCount++;
+            document.getElementById('clickCount').textContent = clickCount;
+        }
+
+        function handleTodoKeypress(event) {
+            if (event.key === 'Enter') {
+                addTodo();
+            }
+        }
+
+        function addTodo() {
+            const input = document.getElementById('todoInput');
+            const text = input.value.trim();
+            
+            if (text) {
+                const todoList = document.getElementById('todoList');
+                const todoItem = document.createElement('li');
+                todoItem.className = 'todo-item';
+                todoItem.innerHTML = `
+                    <div class="todo-checkbox" onclick="toggleTodo(this)"></div>
+                    <span class="todo-text">${text}</span>
+                    <span class="todo-delete" onclick="deleteTodo(this)">×</span>
+                `;
+                todoList.appendChild(todoItem);
+                input.value = '';
+                updateTodoCount();
+                trackClick();
+            }
+        }
+
+        function toggleTodo(checkbox) {
+            checkbox.classList.toggle('checked');
+            const text = checkbox.nextElementSibling;
+            text.classList.toggle('completed');
+            trackClick();
+        }
+
+        function deleteTodo(deleteBtn) {
+            const todoItem = deleteBtn.parentElement;
+            todoItem.style.opacity = '0';
+            todoItem.style.transform = 'translateX(20px)';
+            setTimeout(() => {
+                todoItem.remove();
+                updateTodoCount();
+            }, 200);
+            trackClick();
+        }
+
+        function updateTodoCount() {
+            const todoList = document.getElementById('todoList');
+            const count = todoList.children.length;
+            document.getElementById('todoCount').textContent = count;
+        }
+
+        function addLog(message, type = 'info') {
+            const logArea = document.getElementById('logArea');
+            const time = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            
+            let typeClass = 'log-info';
+            if (type === 'success') typeClass = 'log-success';
+            if (type === 'error') typeClass = 'log-error';
+            
+            logEntry.innerHTML = `
+                <span class="log-time">[${time}]</span>
+                <span class="${typeClass}">${message}</span>
+            `;
+            
+            logArea.insertBefore(logEntry, logArea.firstChild);
+        }
+
+        async function loadFiles() {
+            addLog('正在读取文件列表...', 'info');
+            
+            if (typeof NeoPod === 'undefined' || !NeoPod.readDir) {
+                addLog('NeoPod API 不可用', 'error');
+                return;
+            }
+            
+            try {
+                const files = await NeoPod.readDir('dev/');
+                
+                const list = document.getElementById('fileList');
+                list.innerHTML = '';
+                
+                if (files.length === 0) {
+                    list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📭</div><p>暂无文件</p></div>';
+                    fileCount = 0;
+                } else {
+                    files.forEach(function(file) {
+                        const fileItem = document.createElement('li');
+                        fileItem.className = 'file-item';
+                        fileItem.innerHTML = `
+                            <span class="file-icon">${file.isDirectory ? '📁' : '📄'}</span>
+                            <div class="file-info">
+                                <div class="file-name">${file.name}</div>
+                                <div class="file-meta">${file.size} bytes</div>
+                            </div>
+                            ${!file.isDirectory ? '<span class="file-delete" onclick="deleteFile(\'' + file.name + '\')">×</span>' : ''}
+                        `;
+                        list.appendChild(fileItem);
+                    });
+                    fileCount = files.length;
+                }
+                
+                document.getElementById('fileCount').textContent = fileCount;
+                addLog('成功读取 ' + fileCount + ' 个文件', 'success');
+            } catch (error) {
+                addLog('读取目录失败: ' + error.message, 'error');
+            }
+        }
+
+        async function createFile() {
+            const input = document.getElementById('fileInput');
+            const text = input.value.trim();
+            if (!text) {
+                addLog('请输入文件名和内容', 'error');
+                return;
+            }
+            
+            const parts = text.split('|');
+            const filename = parts[0].trim() || 'test.txt';
+            const content = parts[1] || 'Hello World!';
+            
+            addLog('正在创建文件: ' + filename, 'info');
+            
+            if (typeof NeoPod === 'undefined' || !NeoPod.writeFile) {
+                addLog('NeoPod API 不可用', 'error');
+                return;
+            }
+            
+            try {
+                await NeoPod.writeFile('dev/' + filename, content);
+                addLog('文件创建成功: ' + filename, 'success');
+                input.value = '';
+                loadFiles();
+            } catch (error) {
+                addLog('文件创建失败: ' + error.message, 'error');
+            }
+        }
+
+        async function deleteFile(filename) {
+            if (!confirm('确定要删除 ' + filename + ' 吗？')) return;
+            
+            addLog('正在删除文件: ' + filename, 'info');
+            
+            if (typeof NeoPod === 'undefined' || !NeoPod.deleteFile) {
+                addLog('NeoPod API 不可用', 'error');
+                return;
+            }
+            
+            try {
+                await NeoPod.deleteFile('dev/' + filename);
+                addLog('文件删除成功: ' + filename, 'success');
+                loadFiles();
+            } catch (error) {
+                addLog('文件删除失败: ' + error.message, 'error');
+            }
+        }
+
+        function updateTimeElapsed() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            
+            if (minutes > 0) {
+                document.getElementById('timeElapsed').textContent = `${minutes}m ${seconds}s`;
+            } else {
+                document.getElementById('timeElapsed').textContent = `${seconds}s`;
+            }
+        }
+
+        function initColorPicker() {
+            const colorOptions = document.querySelectorAll('.color-option');
+            colorOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    colorOptions.forEach(opt => opt.classList.remove('active'));
+                    this.classList.add('active');
+                    accentColor = this.dataset.color;
+                    updateAccentColor();
+                    trackClick();
+                });
+            });
+        }
+
+        function updateAccentColor() {
+            document.querySelectorAll('.card-title, .counter-display, .status-value, .btn, .app-title').forEach(el => {
+                el.style.color = accentColor;
+            });
+            
+            document.querySelectorAll('.btn').forEach(btn => {
+                if (!btn.classList.contains('btn-secondary')) {
+                    btn.style.backgroundColor = accentColor;
+                }
+            });
+
+            document.querySelectorAll('.nav-item.active').forEach(item => {
+                item.style.color = accentColor;
+            });
+
+            document.querySelectorAll('.todo-checkbox.checked').forEach(checkbox => {
+                checkbox.style.backgroundColor = accentColor;
+                checkbox.style.borderColor = accentColor;
+            });
+        }
+
+        function adjustLayout() {
+            document.body.style.transform = 'translateZ(0)';
+            setTimeout(() => {
+                document.body.style.transform = '';
+            }, 0);
+        }
+
+        window.addEventListener('resize', adjustLayout);
+        window.addEventListener('load', adjustLayout);
+        window.addEventListener('orientationchange', adjustLayout);
+
+        setInterval(updateTimeElapsed, 1000);
+        initColorPicker();
+        adjustLayout();
+    </script>
+</body>
+</html>
