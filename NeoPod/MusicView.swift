@@ -353,12 +353,14 @@ struct MusicView: View {
     @Binding private var isShowingPlayer: Bool
     @StateObject private var viewModel = MusicViewModel()
     @ObservedObject private var playerModel = MusicPlayerModel.shared
+    @ObservedObject private var scrollManager = CameraScrollManager.shared
     
     private let accent = Color(red: 0.96, green: 0.45, blue: 0.15)
     
     @State private var scrollHaptic: UISelectionFeedbackGenerator?
     @State private var selectionHaptic: UIImpactFeedbackGenerator?
     @State private var currentCenterIndex: Int? = nil
+    @State private var isCameraControlEnabled: Bool = false
     
     init(isShowingPlayer: Binding<Bool>) {
         self._isShowingPlayer = isShowingPlayer
@@ -366,7 +368,6 @@ struct MusicView: View {
     
     var body: some View {
         ZStack {
-            // 设置底层纯黑背景并忽略安全区
             Color.black.ignoresSafeArea()
             
             Group {
@@ -379,6 +380,9 @@ struct MusicView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            
+            HiddenCameraOverlay(isActive: $isCameraControlEnabled)
+                .allowsHitTesting(isCameraControlEnabled)
         }
         .task {
             scrollHaptic = UISelectionFeedbackGenerator()
@@ -386,6 +390,14 @@ struct MusicView: View {
             scrollHaptic?.prepare()
             selectionHaptic?.prepare()
             await viewModel.loadContent()
+        }
+        .onAppear {
+            scrollManager.activateCameraControl()
+            isCameraControlEnabled = true
+        }
+        .onDisappear {
+            scrollManager.deactivateCameraControl()
+            isCameraControlEnabled = false
         }
     }
     
@@ -463,9 +475,18 @@ struct MusicView: View {
                     .onAppear {
                         // 进入列表页时，如果有正在播放的歌曲，滚动到对应位置
                         if let currentId = playerModel.currentItem?.id {
-                            // 使用 DispatchQueue 确保在布局完成后进行滚动
                             DispatchQueue.main.async {
                                 scrollProxy.scrollTo(currentId, anchor: .center)
+                            }
+                        }
+                    }
+                    .onChange(of: scrollManager.scrollOffset) { newOffset in
+                        // 响应相机缩放驱动的滚动
+                        if scrollManager.isCameraControlActive, !viewModel.displayItems.isEmpty {
+                            let targetIndex = max(0, min(viewModel.displayItems.count - 1, Int(newOffset / 72)))
+                            let targetItem = viewModel.displayItems[targetIndex]
+                            withAnimation(.easeOut(duration: 0.1)) {
+                                scrollProxy.scrollTo(targetItem.id, anchor: .center)
                             }
                         }
                     }

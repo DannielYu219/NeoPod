@@ -3,6 +3,8 @@ import WebKit
 
 struct ProgramsView: View {
     @StateObject private var viewModel = ProgramsViewModel()
+    @ObservedObject private var scrollManager = CameraScrollManager.shared
+    @State private var isCameraControlEnabled: Bool = false
     var onFileSelected: ((HTMLFileInfo) -> Void)?
     
     private let accent = Color(red: 0.96, green: 0.45, blue: 0.15)
@@ -12,10 +14,21 @@ struct ProgramsView: View {
             Color.black.ignoresSafeArea()
             
             listView
+            
+            HiddenCameraOverlay(isActive: $isCameraControlEnabled)
+                .allowsHitTesting(isCameraControlEnabled)
         }
         .task {
             FileSystemManager.ensureAppFoldersExist()
             viewModel.loadHTMLFiles()
+        }
+        .onAppear {
+            scrollManager.activateCameraControl()
+            isCameraControlEnabled = true
+        }
+        .onDisappear {
+            scrollManager.deactivateCameraControl()
+            isCameraControlEnabled = false
         }
         .alert("Uninstall App", isPresented: $viewModel.showUninstallConfirm) {
             Button("Cancel", role: .cancel) {
@@ -40,61 +53,70 @@ struct ProgramsView: View {
         GeometryReader { listProxy in
             let containerMidY = listProxy.size.height / 2
             
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        Text("\(viewModel.htmlFiles.count) programs")
-                            .font(.system(size: 14, design: .rounded))
-                            .foregroundColor(.white.opacity(0.6))
-                        Spacer()
-                        Button {
-                            viewModel.loadHTMLFiles()
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundColor(accent)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 16)
-                    .padding(.bottom, 16)
-                    
-                    if viewModel.htmlFiles.isEmpty && !viewModel.isLoading {
-                        VStack(spacing: 12) {
-                            Image(systemName: "doc.text")
-                                .font(.system(size: 48))
-                                .opacity(0.5)
-                            Text("No programs")
-                                .font(.system(size: 18, weight: .bold, design: .rounded))
-                            Text("Download apps from Store or place files in 'dev' folder")
-                                .font(.system(size: 14, weight: .regular, design: .rounded))
-                                .foregroundColor(.white.opacity(0.5))
-                        }
-                        .foregroundColor(.white)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 100)
-                    } else {
-                        LazyVStack(alignment: .leading, spacing: 0) {
-                            ForEach(viewModel.htmlFiles) { file in
-                                ProgramRowView(
-                                    file: file,
-                                    accent: accent,
-                                    containerMidY: containerMidY,
-                                    isUninstalling: viewModel.uninstallingAppId == file.id,
-                                    onTap: {
-                                        onFileSelected?(file)
-                                    },
-                                    onUninstall: {
-                                        viewModel.requestUninstall(file)
-                                    }
-                                )
-                            }
-                        }
-                        .padding(.bottom, 40)
+            ScrollView(showsIndicators: false) { content }
+                .coordinateSpace(name: "programsList")
+                .onChange(of: scrollManager.scrollOffset) { newOffset in
+                    if scrollManager.isCameraControlActive, !viewModel.htmlFiles.isEmpty {
+                        // ProgramsView 不需要实际滚动，但保留响应
+                        // 如需实现滚动，可将 ScrollView 包装在 ScrollViewReader 中
                     }
                 }
+        }
+    }
+    
+    @ViewBuilder
+    private var content: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("\(viewModel.htmlFiles.count) programs")
+                    .font(.system(size: 14, design: .rounded))
+                    .foregroundColor(.white.opacity(0.6))
+                Spacer()
+                Button {
+                    viewModel.loadHTMLFiles()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(accent)
+                }
+                .buttonStyle(.plain)
             }
-            .coordinateSpace(name: "programsList")
+            .padding(.top, 16)
+            .padding(.bottom, 16)
+            
+            if viewModel.htmlFiles.isEmpty && !viewModel.isLoading {
+                VStack(spacing: 12) {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 48))
+                        .opacity(0.5)
+                    Text("No programs")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                    Text("Download apps from Store or place files in 'dev' folder")
+                        .font(.system(size: 14, weight: .regular, design: .rounded))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 100)
+            } else {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(viewModel.htmlFiles) { file in
+                        ProgramRowView(
+                            file: file,
+                            accent: accent,
+                            containerMidY: containerMidY,
+                            isUninstalling: viewModel.uninstallingAppId == file.id,
+                            onTap: {
+                                onFileSelected?(file)
+                            },
+                            onUninstall: {
+                                viewModel.requestUninstall(file)
+                            }
+                        )
+                    }
+                }
+                .padding(.bottom, 40)
+            }
         }
     }
 }
