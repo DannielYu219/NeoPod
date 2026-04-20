@@ -1,6 +1,6 @@
 import Foundation
 import AVFoundation
-import Combine
+internal import Combine
 
 /// 相机缩放控制器 - 管理相机会话和捏合缩放手势
 /// 作用：通过隐藏的相机界面捕捉用户的捏合手势，将缩放结果转换为可共享的滚动值
@@ -40,8 +40,8 @@ class CameraZoomController: ObservableObject {
                 session.addInput(input)
             }
             
-            // 检查相机是否支持平滑缩放
-            if camera.isSmoothZoomSupported {
+            // 检查相机是否支持连续缩放
+            if camera.isContinuousZoomSupported {
                 currentZoomFactor = 1.0
             }
             
@@ -111,6 +111,10 @@ class CameraZoomController: ObservableObject {
     }
     
     deinit {
-        stopCamera()
+        Task.detached { [captureSession] in
+            await MainActor.run {
+                captureSession?.stopRunning()
+            }
+        }
     }
 }
