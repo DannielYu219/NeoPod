@@ -40,11 +40,6 @@ class CameraZoomController: ObservableObject {
                 session.addInput(input)
             }
             
-            // 检查相机是否支持连续缩放
-            if camera.isContinuousZoomSupported {
-                currentZoomFactor = 1.0
-            }
-            
             isCameraReady = true
             
             // 在后台线程启动相机会话
