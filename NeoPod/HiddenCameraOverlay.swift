@@ -21,7 +21,7 @@ struct HiddenCameraOverlay: View {
                 
                 // 相机预览层（透明度极低，用户不可见）
                 if cameraController.isCameraReady {
-                    CameraPreviewView(session: cameraController.captureSession)
+                    CameraPreviewView(session: cameraController.session)
                         .opacity(0.001)  // 几乎完全透明
                         .allowsHitTesting(false)
                 }

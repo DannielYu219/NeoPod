@@ -18,5 +18,7 @@
 	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access enables gesture-based scrolling control via zoom gestures</string>
 </dict>
 </plist>

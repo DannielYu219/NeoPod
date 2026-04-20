@@ -15,6 +15,7 @@ class CameraZoomController: ObservableObject {
     
     private var captureSession: AVCaptureSession?
     private var videoDeviceInput: AVCaptureDeviceInput?
+    var session: AVCaptureSession? { captureSession }
     private var currentZoomFactor: CGFloat = 1.0  // 实际相机缩放因子
     private let minZoomFactor: CGFloat = 1.0
     private let maxZoomFactor: CGFloat = 5.0  // 最大缩放倍数
@@ -45,6 +46,11 @@ class CameraZoomController: ObservableObject {
             }
             
             isCameraReady = true
+            
+            // 在后台线程启动相机会话
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.captureSession?.startRunning()
+            }
         } catch {
             errorMessage = "相机初始化失败: \(error.localizedDescription)"
             isCameraReady = false
