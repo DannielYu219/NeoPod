@@ -24,6 +24,6 @@ struct HiddenCameraOverlay: View {
                         }
                 )
         }
-        .allowsHitTesting(true)  // 允许手势穿透，不阻塞原生 ScrollView
+        .allowsHitTesting(false)  // 不拦截手势，让事件穿透到 ScrollView
     }
 }
