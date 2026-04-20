@@ -53,19 +53,17 @@ struct ProgramsView: View {
         GeometryReader { listProxy in
             let containerMidY = listProxy.size.height / 2
             
-            ScrollView(showsIndicators: false) { content }
+            ScrollView(showsIndicators: false) { content(containerMidY: containerMidY) }
                 .coordinateSpace(name: "programsList")
                 .onChange(of: scrollManager.scrollOffset) { newOffset in
                     if scrollManager.isCameraControlActive, !viewModel.htmlFiles.isEmpty {
-                        // ProgramsView 不需要实际滚动，但保留响应
-                        // 如需实现滚动，可将 ScrollView 包装在 ScrollViewReader 中
                     }
                 }
         }
     }
     
     @ViewBuilder
-    private var content: some View {
+    private func content(containerMidY: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("\(viewModel.htmlFiles.count) programs")
