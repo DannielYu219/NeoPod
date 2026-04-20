@@ -4,7 +4,6 @@ import WebKit
 struct ProgramsView: View {
     @StateObject private var viewModel = ProgramsViewModel()
     @ObservedObject private var scrollManager = CameraScrollManager.shared
-    @State private var isCameraControlEnabled: Bool = false
     var onFileSelected: ((HTMLFileInfo) -> Void)?
     
     private let accent = Color(red: 0.96, green: 0.45, blue: 0.15)
@@ -15,8 +14,7 @@ struct ProgramsView: View {
             
             listView
             
-            HiddenCameraOverlay(isActive: $isCameraControlEnabled)
-                .allowsHitTesting(isCameraControlEnabled)
+            HiddenCameraOverlay()
         }
         .task {
             FileSystemManager.ensureAppFoldersExist()
@@ -24,11 +22,9 @@ struct ProgramsView: View {
         }
         .onAppear {
             scrollManager.activateCameraControl()
-            isCameraControlEnabled = true
         }
         .onDisappear {
             scrollManager.deactivateCameraControl()
-            isCameraControlEnabled = false
         }
         .alert("Uninstall App", isPresented: $viewModel.showUninstallConfirm) {
             Button("Cancel", role: .cancel) {
@@ -60,6 +56,12 @@ struct ProgramsView: View {
                     }
                 }
         }
+        .simultaneousGesture(
+            TapGesture()
+                .onEnded { _ in
+                    scrollManager.deactivateCameraControl()
+                }
+        )
     }
     
     @ViewBuilder

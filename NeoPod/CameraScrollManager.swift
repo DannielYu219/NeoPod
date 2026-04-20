@@ -1,5 +1,5 @@
 import Foundation
-import Combine
+internal import Combine
 import SwiftUI
 
 /// 相机滚动管理器 - 单例，用于在隐藏相机界面和滚动组件之间共享缩放/滚动状态
@@ -12,7 +12,7 @@ class CameraScrollManager: ObservableObject {
     static let shared = CameraScrollManager()
     
     @Published var scrollOffset: CGFloat = 0.0  // 当前滚动偏移量
-    @Published var isCameraControlActive: Bool = false  // 相机控制是否激活
+    @Published var isCameraControlActive: Bool = true  // 默认激活
     @Published var cameraZoomLevel: CGFloat = 0.0  // 当前相机缩放级别 (0.0-1.0)
     
     // 滚动灵敏度 - 值越大，缩放对滚动的影响越大
@@ -22,21 +22,21 @@ class CameraScrollManager: ObservableObject {
     private let zoomDeadzone: CGFloat = 0.02
     
     private var lastZoomLevel: CGFloat = 0.0
-    private var cancellables = Set<AnyCancellable>()
     
     private init() {}
     
-    /// 激活相机控制
-    func activateCameraControl() {
-        isCameraControlActive = true
-        lastZoomLevel = 0.0
-    }
-    
-    /// 停用相机控制
+    /// 停用相机控制 - 在屏幕任何点击时调用
     func deactivateCameraControl() {
+        guard isCameraControlActive else { return }
         isCameraControlActive = false
         scrollOffset = 0.0
         cameraZoomLevel = 0.0
+        lastZoomLevel = 0.0
+    }
+    
+    /// 重新激活相机控制 - 页面出现时调用
+    func activateCameraControl() {
+        isCameraControlActive = true
         lastZoomLevel = 0.0
     }
     
@@ -53,7 +53,6 @@ class CameraScrollManager: ObservableObject {
         }
         
         // 将缩放变化映射为滚动偏移
-        // 正向缩放（放大）= 向下滚动，反向缩放（缩小）= 向上滚动
         let scrollDelta = zoomDelta * scrollSensitivity
         scrollOffset += scrollDelta
         

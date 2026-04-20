@@ -360,7 +360,6 @@ struct MusicView: View {
     @State private var scrollHaptic: UISelectionFeedbackGenerator?
     @State private var selectionHaptic: UIImpactFeedbackGenerator?
     @State private var currentCenterIndex: Int? = nil
-    @State private var isCameraControlEnabled: Bool = false
     
     init(isShowingPlayer: Binding<Bool>) {
         self._isShowingPlayer = isShowingPlayer
@@ -381,8 +380,7 @@ struct MusicView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             
-            HiddenCameraOverlay(isActive: $isCameraControlEnabled)
-                .allowsHitTesting(isCameraControlEnabled)
+            HiddenCameraOverlay()
         }
         .task {
             scrollHaptic = UISelectionFeedbackGenerator()
@@ -393,11 +391,9 @@ struct MusicView: View {
         }
         .onAppear {
             scrollManager.activateCameraControl()
-            isCameraControlEnabled = true
         }
         .onDisappear {
             scrollManager.deactivateCameraControl()
-            isCameraControlEnabled = false
         }
     }
     
@@ -505,6 +501,12 @@ struct MusicView: View {
             }
         }
         .ignoresSafeArea(.all)
+        .simultaneousGesture(
+            TapGesture()
+                .onEnded { _ in
+                    scrollManager.deactivateCameraControl()
+                }
+        )
     }
     
     private func playSong(item: MusicDisplayItem) {
