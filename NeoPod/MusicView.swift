@@ -379,8 +379,6 @@ struct MusicView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            HiddenCameraOverlay()
         }
         .task {
             scrollHaptic = UISelectionFeedbackGenerator()
@@ -388,12 +386,6 @@ struct MusicView: View {
             scrollHaptic?.prepare()
             selectionHaptic?.prepare()
             await viewModel.loadContent()
-        }
-        .onAppear {
-            scrollManager.activateCameraControl()
-        }
-        .onDisappear {
-            scrollManager.deactivateCameraControl()
         }
     }
     
@@ -469,7 +461,6 @@ struct MusicView: View {
                         }
                     }
                     .onAppear {
-                        // 进入列表页时，如果有正在播放的歌曲，滚动到对应位置
                         if let currentId = playerModel.currentItem?.id {
                             DispatchQueue.main.async {
                                 scrollProxy.scrollTo(currentId, anchor: .center)
@@ -477,7 +468,6 @@ struct MusicView: View {
                         }
                     }
                     .onChange(of: scrollManager.scrollOffset) { newOffset in
-                        // 响应相机缩放驱动的滚动
                         if scrollManager.isCameraControlActive, !viewModel.displayItems.isEmpty {
                             let targetIndex = max(0, min(viewModel.displayItems.count - 1, Int(newOffset / 72)))
                             let targetItem = viewModel.displayItems[targetIndex]
@@ -486,6 +476,19 @@ struct MusicView: View {
                             }
                         }
                     }
+                    // 触摸优先：按下/拖动时立即关闭 Camera Control
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 0, coordinateSpace: .named("musicList"))
+                            .onChanged { _ in
+                                scrollManager.deactivateCameraControl()
+                            }
+                    )
+                    .simultaneousGesture(
+                        TapGesture()
+                            .onEnded { _ in
+                                scrollManager.deactivateCameraControl()
+                            }
+                    )
                 }
                 .coordinateSpace(name: "musicList")
                 
@@ -501,12 +504,6 @@ struct MusicView: View {
             }
         }
         .ignoresSafeArea(.all)
-        .simultaneousGesture(
-            TapGesture()
-                .onEnded { _ in
-                    scrollManager.deactivateCameraControl()
-                }
-        )
     }
     
     private func playSong(item: MusicDisplayItem) {
@@ -524,7 +521,6 @@ struct MusicView: View {
     
     private func playerView(for item: MusicDisplayItem) -> some View {
         VStack(spacing: 0) {
-            // Header (NOW PLAYING)
             HStack {
                 Spacer()
                 Text("NOW PLAYING")
@@ -537,7 +533,6 @@ struct MusicView: View {
             
             Spacer()
             
-            // 歌曲信息
             VStack(spacing: 8) {
                 Text(item.title)
                     .font(.system(size: 36, weight: .regular, design: .rounded))
@@ -555,7 +550,6 @@ struct MusicView: View {
             
             Spacer()
             
-            // 进度条
             VStack(spacing: 6) {
                 Slider(value: Binding(get: { playerModel.progress }, set: { playerModel.seek(to: $0) }), in: 0...max(playerModel.duration, 1))
                     .accentColor(accent)
@@ -574,7 +568,6 @@ struct MusicView: View {
             }
             .padding(.bottom, 20)
             
-            // 下方控件
             HStack(spacing: 40) {
                 Button { playerModel.toggleRepeatMode() } label: {
                     Image(systemName: playerModel.repeatMode.icon)
@@ -619,7 +612,7 @@ struct MusicView: View {
     }
 }
 
-// MARK: - MusicRow View (保持不变，已包含 ID)
+// MARK: - MusicRow View
 
 private struct MusicRowView: View {
     let item: MusicDisplayItem
@@ -676,4 +669,3 @@ private struct MusicRowView: View {
         .buttonStyle(.plain)
     }
 }
-

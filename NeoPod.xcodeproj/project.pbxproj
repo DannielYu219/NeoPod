@@ -30,7 +30,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		2FEC9C832F922CFF006B0AAA /* Exceptions for "NeoPod" folder in "NeoPod" target */ = {
+		2F5BE5FD2FC2C2DB00A24BF7 /* Exceptions for "NeoPod" folder in "NeoPod" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
@@ -43,7 +43,7 @@
 		2FCDE8022F40812E005B322D /* NeoPod */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
-				2FEC9C832F922CFF006B0AAA /* Exceptions for "NeoPod" folder in "NeoPod" target */,
+				2F5BE5FD2FC2C2DB00A24BF7 /* Exceptions for "NeoPod" folder in "NeoPod" target */,
 			);
 			path = NeoPod;
 			sourceTree = "<group>";
@@ -288,6 +288,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NeoPod/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -326,6 +327,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = NeoPod/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
