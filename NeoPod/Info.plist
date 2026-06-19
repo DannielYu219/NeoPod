@@ -19,6 +19,6 @@
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Camera access enables gesture-based scrolling control via zoom gestures</string>
+	<string>Camera Control uses the side button's slide surface to scroll through your music library hands-free</string>
 </dict>
 </plist>

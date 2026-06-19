@@ -1,13 +1,13 @@
 {
-  "originHash" : "9893a28f3a1e89d59d47f415330b776be52a995395be654f9cc3cc53b9fab889",
+  "originHash" : "c6dfcb1c92cf3c82359b01e4545ac0cf5ba619a6ba65161a755239f16a37bd8f",
   "pins" : [
     {
-      "identity" : "amsmb2",
+      "identity" : "swift-system",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/amosavian/AMSMB2",
+      "location" : "https://github.com/apple/swift-system.git",
       "state" : {
-        "revision" : "fbb1d37880b7e1d7504c6a6dc9371c10ff932bc9",
-        "version" : "3.0.0"
+        "revision" : "7502b711c92a17741fa625d722b0ccbd595d8ed1",
+        "version" : "1.7.2"
       }
     }
   ],

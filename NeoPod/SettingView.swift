@@ -9,6 +9,7 @@ struct SettingView: View {
     @State private var showSavedAlert = false
     @State private var connectionStatus: ConnectionStatus = .unknown
     @State private var storeConnectionStatus: ConnectionStatus = .unknown
+    @AppStorage("camera_control_enabled") private var cameraControlEnabled = true
     
     private let accent = Color(red: 0.96, green: 0.45, blue: 0.15)
     
@@ -40,6 +41,8 @@ struct SettingView: View {
                 storeSettingsSection
                 
                 navidromeSettingsSection
+                
+                cameraControlSection
                 
                 aboutSection
                 
@@ -209,6 +212,34 @@ struct SettingView: View {
                 .disabled(isSaving)
             }
             .padding(.top, 8)
+        }
+        .padding(20)
+        .background(Color.white.opacity(0.05))
+        .cornerRadius(16)
+    }
+    
+    private var cameraControlSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Camera Control")
+                .font(.system(size: 24, weight: .medium, design: .rounded))
+                .foregroundColor(.white)
+            
+            Toggle(isOn: $cameraControlEnabled) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Side Button Scrolling")
+                        .font(.system(size: 16, weight: .regular, design: .rounded))
+                        .foregroundColor(.white)
+                    Text("Use iPhone 16 Camera Control button to scroll music list")
+                        .font(.system(size: 13, weight: .regular, design: .rounded))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+            }
+            .tint(accent)
+            .onChange(of: cameraControlEnabled) { newValue in
+                if !newValue {
+                    CameraControlHandler.shared.stopSession()
+                }
+            }
         }
         .padding(20)
         .background(Color.white.opacity(0.05))

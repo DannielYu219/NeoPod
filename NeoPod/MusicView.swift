@@ -360,6 +360,7 @@ struct MusicView: View {
     @State private var scrollHaptic: UISelectionFeedbackGenerator?
     @State private var selectionHaptic: UIImpactFeedbackGenerator?
     @State private var currentCenterIndex: Int? = nil
+    @AppStorage("camera_control_enabled") private var cameraControlEnabled = true
     
     init(isShowingPlayer: Binding<Bool>) {
         self._isShowingPlayer = isShowingPlayer
@@ -368,7 +369,14 @@ struct MusicView: View {
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
-            
+
+            // 隐藏 Camera Control 层：获取侧边按键滑动控制权（不可见）
+            if cameraControlEnabled {
+                HiddenCameraControlView()
+                    .frame(width: 1, height: 1)
+                    .allowsHitTesting(false)
+            }
+
             Group {
                 if isShowingPlayer, let current = playerModel.currentItem {
                     playerView(for: current)
@@ -380,12 +388,34 @@ struct MusicView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .overlay(
+            Group {
+                if cameraControlEnabled {
+                    CameraControlInteractionView()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .allowsHitTesting(false)
+                }
+            }
+        )
         .task {
             scrollHaptic = UISelectionFeedbackGenerator()
             selectionHaptic = UIImpactFeedbackGenerator(style: .medium)
             scrollHaptic?.prepare()
             selectionHaptic?.prepare()
             await viewModel.loadContent()
+            if cameraControlEnabled {
+                CameraControlHandler.shared.updateSliderRange(itemCount: viewModel.displayItems.count)
+            }
+        }
+        .onChange(of: viewModel.displayItems.count) { _ in
+            if cameraControlEnabled {
+                CameraControlHandler.shared.updateSliderRange(itemCount: viewModel.displayItems.count)
+            }
+        }
+        .onChange(of: cameraControlEnabled) { enabled in
+            if !enabled {
+                CameraControlHandler.shared.stopSession()
+            }
         }
     }
     
@@ -467,26 +497,33 @@ struct MusicView: View {
                             }
                         }
                     }
-                    .onChange(of: scrollManager.scrollOffset) { newOffset in
+                    .onChange(of: scrollManager.cameraTargetIndex) { targetIndex in
                         if scrollManager.isCameraControlActive, !viewModel.displayItems.isEmpty {
-                            let targetIndex = max(0, min(viewModel.displayItems.count - 1, Int(newOffset / 72)))
-                            let targetItem = viewModel.displayItems[targetIndex]
+                            let clampedIndex = max(0, min(viewModel.displayItems.count - 1, targetIndex))
+                            let targetItem = viewModel.displayItems[clampedIndex]
+                            print("[CameraControl] Scrolling to index \(clampedIndex), item \(targetItem.title)")
                             withAnimation(.easeOut(duration: 0.1)) {
                                 scrollProxy.scrollTo(targetItem.id, anchor: .center)
                             }
                         }
                     }
-                    // 触摸优先：按下/拖动时立即关闭 Camera Control
+                    // 触摸优先：按下/拖动时立即关闭 Camera Control，松开后等待侧边按键输入再激活
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 0, coordinateSpace: .named("musicList"))
                             .onChanged { _ in
-                                scrollManager.deactivateCameraControl()
+                                scrollManager.touchDeactivate()
+                            }
+                            .onEnded { _ in
+                                scrollManager.tryReactivate()
                             }
                     )
                     .simultaneousGesture(
                         TapGesture()
                             .onEnded { _ in
-                                scrollManager.deactivateCameraControl()
+                                scrollManager.touchDeactivate()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                                    scrollManager.tryReactivate()
+                                }
                             }
                     )
                 }
